@@ -324,8 +324,9 @@ function DayPanel({
 // ── Stats Screen ───────────────────────────────────────────
 type StatsMode = 'month' | 'year' | 'all'
 
-function StatsScreen({ records, year, month }: { records: FundRecord[], year: number, month: number }) {
-  const [mode, setMode] = useState<StatsMode>('month')
+function StatsScreen({ records, year, month, mode, setMode }: {
+  records: FundRecord[], year: number, month: number, mode: StatsMode, setMode: (m: StatsMode) => void
+}) {
 
   const filtered = mode === 'all'
     ? records
@@ -490,6 +491,7 @@ export default function App() {
   const [tab, setTab] = useState<'cal' | 'stats'>('cal')
   const [curYear, setCurYear] = useState(new Date().getFullYear())
   const [curMonth, setCurMonth] = useState(new Date().getMonth())
+  const [statsMode, setStatsMode] = useState<StatsMode>('month')
 
   useEffect(() => {
     const u = localStorage.getItem('fj_username')
@@ -516,40 +518,45 @@ export default function App() {
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--tx)' }}>基金日记</div>
-          <div style={{ fontSize: 12, color: 'var(--t2)' }}>{username}</div>
+      <div style={{ padding: '14px 20px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Avatar — click to switch user */}
+        <button onClick={() => { localStorage.removeItem('fj_username'); setUsername(null) }} style={{
+          width: 36, height: 36, borderRadius: '50%', background: 'var(--ac)', border: 'none',
+          color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit'
+        }}>
+          {username.slice(0, 1).toUpperCase()}
+        </button>
+
+        {/* Month picker — center, hidden when stats is year/all */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+          {(tab === 'cal' || statsMode === 'month') && (
+            <MonthPicker
+              year={curYear}
+              month={curMonth}
+              onChange={(y, m) => { setCurYear(y); setCurMonth(m) }}
+            />
+          )}
         </div>
-        <button onClick={() => { localStorage.removeItem('fj_username'); setUsername(null) }} style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--t2)', cursor: 'pointer' }}>退出</button>
-      </div>
 
-      {/* Tab */}
-      <div style={{ display: 'flex', margin: '16px 20px 0', gap: 8 }}>
-        {(['cal', 'stats'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
-            background: tab === t ? 'var(--ac)' : 'var(--card)',
-            color: tab === t ? '#fff' : 'var(--t2)', fontWeight: 600, fontSize: 14, cursor: 'pointer'
-          }}>{t === 'cal' ? '日历' : '统计'}</button>
-        ))}
-      </div>
-
-      {/* Month picker */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px 20px 10px' }}>
-        <MonthPicker
-          year={curYear}
-          month={curMonth}
-          onChange={(y, m) => { setCurYear(y); setCurMonth(m) }}
-        />
+        {/* Tab toggle */}
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          {(['cal', 'stats'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: tab === t ? 'var(--ac)' : 'var(--card)',
+              color: tab === t ? '#fff' : 'var(--t2)', fontWeight: 600, fontSize: 13, fontFamily: 'inherit'
+            }}>{t === 'cal' ? '日历' : '统计'}</button>
+          ))}
+        </div>
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, padding: '0 20px', overflowY: 'auto' }}>
+      <div style={{ flex: 1, padding: '0 20px', overflowY: 'auto', paddingTop: (tab === 'stats' && statsMode !== 'month') ? 10 : 0 }}>
         {loading ? <div style={{ textAlign: 'center', color: 'var(--t2)', padding: '40px 0', fontSize: 14 }}>加载中...</div>
           : tab === 'cal'
           ? <CalendarScreen records={records} year={curYear} month={curMonth} username={username} onRefresh={() => load(username)} />
-          : <StatsScreen records={records} year={curYear} month={curMonth} />
+          : <StatsScreen records={records} year={curYear} month={curMonth} mode={statsMode} setMode={setStatsMode} />
         }
       </div>
 
