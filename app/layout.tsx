@@ -1,0 +1,53 @@
+import type { Metadata, Viewport } from 'next'
+
+export const metadata: Metadata = {
+  title: '基金日记',
+  description: '记录每一笔卖出，追踪真实收益',
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: '基金日记' },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#1D9E75',
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="zh">
+      <head>
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
+      <body style={{ margin: 0, padding: 0, fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif' }}>
+        <style>{`
+          :root {
+            --bg: #F5F5F0;
+            --card: #FFFFFF;
+            --tx: #1a1a1a;
+            --t2: #888;
+            --bd: #E5E5E0;
+            --ac: #1D9E75;
+          }
+          @media (prefers-color-scheme: dark) {
+            :root {
+              --bg: #111;
+              --card: #1e1e1e;
+              --tx: #f0f0f0;
+              --t2: #888;
+              --bd: #333;
+              --ac: #1D9E75;
+            }
+          }
+          * { box-sizing: border-box; }
+          input { outline: none; }
+          button { font-family: inherit; }
+        `}</style>
+        {children}
+      </body>
+    </html>
+  )
+}

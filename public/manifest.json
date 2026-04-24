@@ -1,0 +1,13 @@
+{
+  "name": "基金日记",
+  "short_name": "基金日记",
+  "description": "记录每一笔卖出，追踪真实收益",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F5F0",
+  "theme_color": "#1D9E75",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
