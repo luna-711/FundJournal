@@ -517,9 +517,8 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div style={{ padding: '14px 20px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
-        {/* Avatar — click to switch user */}
+      {/* Header: avatar left, month picker right */}
+      <div style={{ padding: '14px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={() => { localStorage.removeItem('fj_username'); setUsername(null) }} style={{
           width: 36, height: 36, borderRadius: '50%', background: 'var(--ac)', border: 'none',
           color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', flexShrink: 0,
@@ -528,31 +527,17 @@ export default function App() {
           {username.slice(0, 1).toUpperCase()}
         </button>
 
-        {/* Month picker — center, hidden when stats is year/all */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-          {(tab === 'cal' || statsMode === 'month') && (
-            <MonthPicker
-              year={curYear}
-              month={curMonth}
-              onChange={(y, m) => { setCurYear(y); setCurMonth(m) }}
-            />
-          )}
-        </div>
-
-        {/* Tab toggle */}
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-          {(['cal', 'stats'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-              background: tab === t ? 'var(--ac)' : 'var(--card)',
-              color: tab === t ? '#fff' : 'var(--t2)', fontWeight: 600, fontSize: 13, fontFamily: 'inherit'
-            }}>{t === 'cal' ? '日历' : '统计'}</button>
-          ))}
-        </div>
+        {(tab === 'cal' || statsMode === 'month') && (
+          <MonthPicker
+            year={curYear}
+            month={curMonth}
+            onChange={(y, m) => { setCurYear(y); setCurMonth(m) }}
+          />
+        )}
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, padding: '0 20px', overflowY: 'auto', paddingTop: (tab === 'stats' && statsMode !== 'month') ? 10 : 0 }}>
+      <div style={{ flex: 1, padding: '0 20px', overflowY: 'auto', paddingTop: 10 }}>
         {loading ? <div style={{ textAlign: 'center', color: 'var(--t2)', padding: '40px 0', fontSize: 14 }}>加载中...</div>
           : tab === 'cal'
           ? <CalendarScreen records={records} year={curYear} month={curMonth} username={username} onRefresh={() => load(username)} />
@@ -560,8 +545,22 @@ export default function App() {
         }
       </div>
 
-      {/* Bottom safe area */}
-      <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+      {/* Bottom tab bar */}
+      <div style={{
+        display: 'flex', borderTop: '0.5px solid var(--bd)', background: 'var(--card)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
+      }}>
+        {(['cal', 'stats'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{
+            flex: 1, padding: '12px 0', border: 'none', background: 'transparent', cursor: 'pointer',
+            color: tab === t ? 'var(--ac)' : 'var(--t2)', fontWeight: tab === t ? 700 : 400,
+            fontSize: 13, fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2
+          }}>
+            <span style={{ fontSize: 20 }}>{t === 'cal' ? '📅' : '📊'}</span>
+            <span>{t === 'cal' ? '日历' : '统计'}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
