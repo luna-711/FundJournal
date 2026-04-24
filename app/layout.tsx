@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body style={{ margin: 0, padding: 0, fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif' }}>
         <style>{`
           :root {
-            --bg: #F5F5F0;
+            --bg: #FFFFFF;
             --card: #FFFFFF;
             --tx: #1a1a1a;
             --t2: #888;
