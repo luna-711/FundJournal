@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 function getSupabase(): SupabaseClient {
@@ -55,6 +55,91 @@ function computeIRR(cashflows: { days: number; amount: number }[]): number | nul
     if (rate > 1000) rate = 1000
   }
   return isFinite(rate) ? rate : null
+}
+
+// ── Month Picker ───────────────────────────────────────────
+function MonthPicker({
+  year, month, onChange
+}: {
+  year: number, month: number, onChange: (y: number, m: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [calYear, setCalYear] = useState(year)
+  const ref = useRef<HTMLDivElement>(null)
+  const today = new Date()
+  const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+
+  useEffect(() => {
+    if (open) setCalYear(year)
+  }, [open, year])
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          background: 'var(--card)', border: '1px solid var(--bd)',
+          borderRadius: 8, padding: '5px 12px', cursor: 'pointer',
+          fontSize: 15, fontWeight: 600, color: 'var(--tx)', fontFamily: 'inherit'
+        }}
+      >
+        {year}年{month + 1}月
+        <span style={{ fontSize: 9, color: 'var(--t2)', marginLeft: 2 }}>▼</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--card)', border: '1px solid var(--bd)',
+          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+          padding: '12px', width: 230, zIndex: 200
+        }}>
+          {/* Year nav */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <button onClick={() => setCalYear(y => y - 1)} style={{
+              background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6,
+              width: 28, height: 28, cursor: 'pointer', fontSize: 14, color: 'var(--tx)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>‹</button>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--tx)' }}>{calYear}年</span>
+            <button onClick={() => setCalYear(y => y + 1)} style={{
+              background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6,
+              width: 28, height: 28, cursor: 'pointer', fontSize: 14, color: 'var(--tx)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>›</button>
+          </div>
+          {/* Month grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 4 }}>
+            {months.map((name, i) => {
+              const isSelected = calYear === year && i === month
+              const isToday = calYear === today.getFullYear() && i === today.getMonth()
+              return (
+                <button key={i} onClick={() => { onChange(calYear, i); setOpen(false) }} style={{
+                  padding: '7px 0', borderRadius: 7, fontSize: 13, cursor: 'pointer',
+                  fontFamily: 'inherit', textAlign: 'center',
+                  background: isSelected ? '#1a1a1a' : 'transparent',
+                  color: isSelected ? '#fff' : 'var(--tx)',
+                  border: isToday && !isSelected ? '1px solid var(--tx)' : '1px solid transparent',
+                  fontWeight: isToday ? 600 : 400,
+                }}>
+                  {name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Login Screen ──────────────────────────────────────────
@@ -120,7 +205,6 @@ function AddModal({
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>×</button>
         </div>
 
-        {/* type toggle */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           {(['buy', 'sell'] as RecordType[]).map(t => (
             <button key={t} onClick={() => setType(t)} style={{
@@ -181,9 +265,7 @@ function DayPanel({
   const d = new Date(date + 'T00:00:00')
   const dateStr = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
   const sells = records.filter(r => r.type === 'sell')
-  const buys = records.filter(r => r.type === 'buy')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
-  const totalBuy = records.reduce((s, r) => s + (r.type === 'buy' ? r.amount : 0), 0)
   const totalInvest = sells.reduce((s, r) => s + r.amount, 0)
 
   const del = async (id: string) => {
@@ -240,26 +322,30 @@ function DayPanel({
 }
 
 // ── Stats Screen ───────────────────────────────────────────
-function StatsScreen({ records, year, month }: { records: FundRecord[], year: number, month: number | null }) {
-  const filtered = month !== null
-    ? records.filter(r => { const d = new Date(r.record_date); return d.getFullYear() === year && d.getMonth() === month })
-    : records.filter(r => new Date(r.record_date).getFullYear() === year)
+type StatsMode = 'month' | 'year' | 'all'
+
+function StatsScreen({ records, year, month }: { records: FundRecord[], year: number, month: number }) {
+  const [mode, setMode] = useState<StatsMode>('month')
+
+  const filtered = mode === 'all'
+    ? records
+    : mode === 'year'
+    ? records.filter(r => new Date(r.record_date).getFullYear() === year)
+    : records.filter(r => { const d = new Date(r.record_date); return d.getFullYear() === year && d.getMonth() === month })
 
   const sells = filtered.filter(r => r.type === 'sell')
-  const buys = filtered.filter(r => r.type === 'buy')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
-  const totalBuy = buys.reduce((s, r) => s + r.amount, 0)
   const totalInvest = sells.reduce((s, r) => s + r.amount, 0)
 
-  // IRR
-  const baseDate = new Date(year, 0, 1)
+  const baseDate = mode === 'all'
+    ? (records.length ? new Date(records[records.length - 1].record_date) : new Date())
+    : new Date(year, 0, 1)
   const cashflows = filtered.map(r => {
     const days = Math.round((new Date(r.record_date).getTime() - baseDate.getTime()) / 86400000)
     return { days, amount: r.type === 'buy' ? -r.amount : r.amount + r.pnl }
   })
   const irr = computeIRR(cashflows)
 
-  // by fund
   const byFund: Record<string, { name: string, code: string, invest: number, pnl: number }> = {}
   sells.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
@@ -268,8 +354,26 @@ function StatsScreen({ records, year, month }: { records: FundRecord[], year: nu
     byFund[key].pnl += r.pnl
   })
 
+  const modes: { key: StatsMode, label: string }[] = [
+    { key: 'month', label: '本月' },
+    { key: 'year', label: '本年' },
+    { key: 'all', label: '全部' },
+  ]
+
   return (
     <div style={{ padding: '0 0 2rem' }}>
+      {/* Mode toggle */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {modes.map(m => (
+          <button key={m.key} onClick={() => setMode(m.key)} style={{
+            flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+            background: mode === m.key ? 'var(--tx)' : 'var(--card)',
+            color: mode === m.key ? '#fff' : 'var(--t2)',
+            fontWeight: 600, fontSize: 13, fontFamily: 'inherit'
+          }}>{m.label}</button>
+        ))}
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
         <StatCard label="卖出本金" value={fmt(totalInvest)} />
         <StatCard label="总盈亏" value={(totalPnl >= 0 ? '+' : '') + fmt(totalPnl)} color={totalPnl > 0 ? '#1D9E75' : totalPnl < 0 ? '#E24B4A' : undefined} />
@@ -409,10 +513,6 @@ export default function App() {
 
   if (!username) return <LoginScreen onLogin={login} />
 
-  const monthName = `${curYear}年${curMonth + 1}月`
-  const prevMonth = () => { if (curMonth === 0) { setCurYear(y => y - 1); setCurMonth(11) } else setCurMonth(m => m - 1) }
-  const nextMonth = () => { if (curMonth === 11) { setCurYear(y => y + 1); setCurMonth(0) } else setCurMonth(m => m + 1) }
-
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
@@ -435,11 +535,13 @@ export default function App() {
         ))}
       </div>
 
-      {/* Month nav */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px 10px' }}>
-        <button onClick={prevMonth} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>‹</button>
-        <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--tx)' }}>{monthName}</span>
-        <button onClick={nextMonth} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>›</button>
+      {/* Month picker */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px 20px 10px' }}>
+        <MonthPicker
+          year={curYear}
+          month={curMonth}
+          onChange={(y, m) => { setCurYear(y); setCurMonth(m) }}
+        />
       </div>
 
       {/* Content */}
