@@ -191,7 +191,8 @@ function AddModal({
   }
 
   const save = async () => {
-    if (!amount || isNaN(Number(amount))) return
+    const val = type === 'buy' ? amount : pnl
+    if (!val || isNaN(Number(val))) return
     setSaving(true)
     await supabase.from('fund_records').insert({
       username,
@@ -199,8 +200,8 @@ function AddModal({
       type,
       fund_name: name.trim(),
       fund_code: code.trim(),
-      amount: Number(amount),
-      pnl: type === 'sell' ? Number(pnl) || 0 : 0,
+      amount: type === 'buy' ? Number(amount) : 0,
+      pnl: type === 'sell' ? Number(pnl) : 0,
     })
     setSaving(false)
     onSaved()
@@ -246,17 +247,9 @@ function AddModal({
           <input style={inputStyle} placeholder="自动填入，也可手动输入" value={name} onChange={e => setName(e.target.value)} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: type === 'sell' ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 20 }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>{type === 'buy' ? '买入金额（元）' : '投入本金（元）'}</div>
-            <input style={inputStyle} type="number" placeholder="0" value={amount} onChange={e => setAmount(e.target.value)} />
-          </div>
-          {type === 'sell' && (
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>盈亏金额（元）</div>
-              <input style={inputStyle} type="number" placeholder="亏损填负数" value={pnl} onChange={e => setPnl(e.target.value)} />
-            </div>
-          )}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>{type === 'buy' ? '买入金额（元）' : '盈亏金额（元）'}</div>
+          <input style={inputStyle} type="number" placeholder={type === 'buy' ? '0' : '亏损填负数'} value={type === 'buy' ? amount : pnl} onChange={e => type === 'buy' ? setAmount(e.target.value) : setPnl(e.target.value)} />
         </div>
 
         <button onClick={save} disabled={saving || !amount} style={{
@@ -327,7 +320,7 @@ function DayPanel({
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{fmt(r.amount)}</div>
                 {r.type === 'sell' && <div style={{ fontSize: 12, color: r.pnl >= 0 ? '#1D9E75' : '#E24B4A' }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>}
               </div>
-              <button onClick={() => del(r.id)} style={{ background: 'none', border: 'none', color: 'var(--t2)', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}>×</button>
+              <button onClick={() => del(r.id)} style={{ background: 'none', border: 'none', color: '#E24B4A', fontSize: 12, cursor: 'pointer', padding: '4px 6px' }}>删除</button>
             </div>
           </div>
         ))}
