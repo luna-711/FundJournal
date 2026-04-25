@@ -70,7 +70,8 @@ function MonthPicker({
   const [open, setOpen] = useState(false)
   const [calYear, setCalYear] = useState(year)
   const ref = useRef<HTMLDivElement>(null)
-  const today = new Date()
+  const [today, setToday] = useState<Date | null>(null)
+  useEffect(() => { setToday(new Date()) }, [])
   const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
 
   useEffect(() => {
@@ -488,7 +489,8 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
 
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const today = new Date()
+  const [today, setToday] = useState<Date | null>(null)
+  useEffect(() => { setToday(new Date()) }, [])
   const weeks = ['日', '一', '二', '三', '四', '五', '六']
 
   return (
@@ -502,7 +504,7 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
           const d = i + 1
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
           const data = dayMap[dateStr]
-          const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d
+          const isToday = today !== null && today.getFullYear() === year && today.getMonth() === month && today.getDate() === d
           const hasSell = data?.records.some(r => r.type === 'sell')
           return (
             <div key={d} onClick={() => setSelDay(dateStr)} style={{
@@ -539,11 +541,14 @@ export default function App() {
   const [records, setRecords] = useState<FundRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'cal' | 'stats'>('cal')
-  const [curYear, setCurYear] = useState(new Date().getFullYear())
-  const [curMonth, setCurMonth] = useState(new Date().getMonth())
+  const [curYear, setCurYear] = useState(0)
+  const [curMonth, setCurMonth] = useState(0)
   const [statsMode, setStatsMode] = useState<StatsMode>('month')
 
   useEffect(() => {
+    const now = new Date()
+    setCurYear(now.getFullYear())
+    setCurMonth(now.getMonth())
     const u = localStorage.getItem('fj_username')
     if (u) setUsername(u)
   }, [])
