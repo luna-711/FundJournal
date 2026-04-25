@@ -439,11 +439,11 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
   const selRecords = selDay ? (dayMap[selDay]?.records || []) : []
 
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 4 }}>
-        {weeks.map(w => <div key={w} style={{ textAlign: 'center', fontSize: 11, color: 'var(--t2)', padding: '4px 0' }}>{w}</div>)}
+    <div style={{ paddingTop: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 6 }}>
+        {weeks.map(w => <div key={w} style={{ textAlign: 'center', fontSize: 12, color: 'var(--t2)', padding: '4px 0' }}>{w}</div>)}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
         {Array(firstDay).fill(null).map((_, i) => <div key={'e' + i} />)}
         {Array(daysInMonth).fill(null).map((_, i) => {
           const d = i + 1
@@ -451,33 +451,29 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
           const data = dayMap[dateStr]
           const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d
           const hasSell = data?.records.some(r => r.type === 'sell')
-          const hasBuy = data?.records.some(r => r.type === 'buy')
           return (
             <div key={d} onClick={() => setSelDay(dateStr)} style={{
-              minHeight: 52, borderRadius: 8, border: `1px solid ${isToday ? 'var(--ac)' : data ? 'var(--bd)' : 'transparent'}`,
+              minHeight: 62, borderRadius: 10, border: `1.5px solid ${isToday ? 'var(--ac)' : data ? 'var(--bd)' : 'transparent'}`,
               background: data ? 'var(--card)' : 'transparent',
-              padding: '4px 5px', cursor: 'pointer', position: 'relative'
+              padding: '5px 6px', cursor: 'pointer'
             }}>
-              <div style={{ fontSize: 11, color: isToday ? 'var(--ac)' : 'var(--t2)', fontWeight: isToday ? 700 : 400 }}>{d}</div>
-              {hasSell && <div style={{ fontSize: 10, fontWeight: 600, color: data.totalPnl >= 0 ? '#1D9E75' : '#E24B4A', lineHeight: 1.2 }}>
+              <div style={{ fontSize: 12, color: isToday ? 'var(--ac)' : 'var(--t2)', fontWeight: isToday ? 700 : 400, marginBottom: 2 }}>{d}</div>
+              {hasSell && <div style={{ fontSize: 11, fontWeight: 600, color: data.totalPnl >= 0 ? '#1D9E75' : '#E24B4A', lineHeight: 1.3 }}>
                 {data.totalPnl >= 0 ? '+' : ''}{Math.round(data.totalPnl)}
               </div>}
-              {hasBuy && !hasSell && <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#378ADD', margin: '2px auto 0' }} />}
             </div>
           )
         })}
       </div>
 
-      <button onClick={() => { setSelDay(`${year}-${String(month + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`); setShowAdd(true) }}
-        style={{ width: '100%', marginTop: 16, padding: '13px 0', borderRadius: 12, border: '1px dashed var(--bd)', background: 'transparent', color: 'var(--t2)', fontSize: 14, cursor: 'pointer' }}>
-        + 今天添加记录
-      </button>
-
-      {selDay && !showAdd && (
-        <DayPanel date={selDay} records={selRecords} username={username} onClose={() => setSelDay(null)} onRefresh={() => { onRefresh(); }} />
-      )}
-      {showAdd && selDay && (
-        <AddModal date={selDay} username={username} onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); onRefresh() }} />
+      {selDay && (
+        <DayPanel
+          date={selDay}
+          records={selRecords}
+          username={username}
+          onClose={() => setSelDay(null)}
+          onRefresh={() => { onRefresh() }}
+        />
       )}
     </div>
   )
@@ -552,12 +548,11 @@ export default function App() {
       }}>
         {(['cal', 'stats'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
-            flex: 1, padding: '12px 0', border: 'none', background: 'transparent', cursor: 'pointer',
+            flex: 1, padding: '14px 0', border: 'none', background: 'transparent', cursor: 'pointer',
             color: tab === t ? 'var(--ac)' : 'var(--t2)', fontWeight: tab === t ? 700 : 400,
-            fontSize: 13, fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2
+            fontSize: 14, fontFamily: 'inherit'
           }}>
-            <span style={{ fontSize: 20 }}>{t === 'cal' ? '📅' : '📊'}</span>
-            <span>{t === 'cal' ? '日历' : '统计'}</span>
+            {t === 'cal' ? '日历' : '统计'}
           </button>
         ))}
       </div>
