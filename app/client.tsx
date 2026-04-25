@@ -355,23 +355,43 @@ function StatsScreen({ records, year, month, mode, setMode }: {
   const sells = filtered.filter(r => r.type === 'sell')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
   const totalInvest = sells.reduce((s, r) => s + r.amount, 0)
+  const totalReturn = totalInvest > 0 ? totalPnl / totalInvest * 100 : 0
 
-  const baseDate = mode === 'all'
-    ? (records.length ? new Date(records[records.length - 1].record_date) : new Date())
-    : new Date(year, 0, 1)
-  const cashflows = filtered.map(r => {
-    const days = Math.round((new Date(r.record_date).getTime() - baseDate.getTime()) / 86400000)
-    return { days, amount: r.type === 'buy' ? -r.amount : r.amount + r.pnl }
-  })
-  const irr = computeIRR(cashflows)
-
-  const byFund: Record<string, { name: string, code: string, invest: number, pnl: number }> = {}
+  // 按基金统计，用全部买入记录找最早买入日期算年化
+  const allBuys = records.filter(r => r.type === 'buy')
+  const byFund: Record<string, { name: string, code: string, invest: number, pnl: number, earliestBuy: Date | null, latestSell: Date | null }> = {}
   sells.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
-    if (!byFund[key]) byFund[key] = { name: r.fund_name, code: r.fund_code, invest: 0, pnl: 0 }
+    if (!byFund[key]) byFund[key] = { name: r.fund_name, code: r.fund_code, invest: 0, pnl: 0, earliestBuy: null, latestSell: null }
     byFund[key].invest += r.amount
     byFund[key].pnl += r.pnl
+    const sellDate = new Date(r.record_date)
+    if (!byFund[key].latestSell || sellDate > byFund[key].latestSell!) byFund[key].latestSell = sellDate
   })
+  // 找每个基金最早买入日期（从全部记录里找，不限于filtered）
+  allBuys.forEach(r => {
+    const key = r.fund_code || r.fund_name || '未知'
+    if (!byFund[key]) return // 只关心有卖出的基金
+    const buyDate = new Date(r.record_date)
+    if (!byFund[key].earliestBuy || buyDate < byFund[key].earliestBuy!) byFund[key].earliestBuy = buyDate
+  })
+
+  // 总体年化：用所有卖出里最早买入日 → 最晚卖出日
+  let overallAnnualized: number | null = null
+  if (totalInvest > 0) {
+    const allSellDates = sells.map(r => new Date(r.record_date))
+    const latestSell = allSellDates.length ? new Date(Math.max(...allSellDates.map(d => d.getTime()))) : null
+    // 找这些卖出基金的最早买入
+    const relevantKeys = new Set(sells.map(r => r.fund_code || r.fund_name || '未知'))
+    const relevantBuys = allBuys.filter(r => relevantKeys.has(r.fund_code || r.fund_name || '未知'))
+    const earliestBuy = relevantBuys.length
+      ? new Date(Math.min(...relevantBuys.map(r => new Date(r.record_date).getTime())))
+      : null
+    if (earliestBuy && latestSell) {
+      const days = Math.round((latestSell.getTime() - earliestBuy.getTime()) / 86400000)
+      if (days > 0) overallAnnualized = (totalPnl / totalInvest) / days * 365 * 100
+    }
+  }
 
   const modes: { key: StatsMode, label: string }[] = [
     { key: 'month', label: '本月' },
@@ -396,24 +416,42 @@ function StatsScreen({ records, year, month, mode, setMode }: {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
         <StatCard label="卖出本金" value={fmt(totalInvest)} />
         <StatCard label="总盈亏" value={(totalPnl >= 0 ? '+' : '') + fmt(totalPnl)} color={totalPnl > 0 ? '#1D9E75' : totalPnl < 0 ? '#E24B4A' : undefined} />
-        <StatCard label={irr !== null ? 'IRR年化' : '简单收益率'} value={irr !== null ? fmtPct(irr * 100) : totalInvest > 0 ? fmtPct(totalPnl / totalInvest * 100) : '—'} color={totalPnl > 0 ? '#1D9E75' : totalPnl < 0 ? '#E24B4A' : undefined} />
+        <StatCard
+          label={overallAnnualized !== null ? '年化收益率' : '简单收益率'}
+          value={overallAnnualized !== null ? fmtPct(overallAnnualized) : totalInvest > 0 ? fmtPct(totalReturn) : '—'}
+          color={totalPnl > 0 ? '#1D9E75' : totalPnl < 0 ? '#E24B4A' : undefined}
+        />
       </div>
 
       {Object.keys(byFund).length > 0 && (
         <>
           <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 10 }}>按基金统计</div>
-          {Object.values(byFund).sort((a, b) => b.pnl - a.pnl).map((f, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{f.name || '未命名'}</div>
-                {f.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{f.code}</div>}
+          {Object.values(byFund).sort((a, b) => b.pnl - a.pnl).map((f, i) => {
+            // 每个基金的年化
+            let annualized: number | null = null
+            if (f.earliestBuy && f.latestSell && f.invest > 0) {
+              const days = Math.round((f.latestSell.getTime() - f.earliestBuy.getTime()) / 86400000)
+              if (days > 0) annualized = (f.pnl / f.invest) / days * 365 * 100
+            }
+            const pctLabel = annualized !== null ? fmtPct(annualized) + '/年' : fmtPct(f.invest > 0 ? f.pnl / f.invest * 100 : 0)
+            return (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{f.name || '未命名'}</div>
+                  {f.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{f.code}</div>}
+                  {f.earliestBuy && <div style={{ fontSize: 11, color: 'var(--t2)' }}>
+                    买入 {f.earliestBuy.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                    {f.latestSell && ` → 卖出 ${f.latestSell.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}`}
+                  </div>}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 14, color: f.pnl >= 0 ? '#1D9E75' : '#E24B4A', fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
+                  <div style={{ fontSize: 12, color: f.pnl >= 0 ? '#1D9E75' : '#E24B4A' }}>{pctLabel}</div>
+                  <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>
+                </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 14, color: f.pnl >= 0 ? '#1D9E75' : '#E24B4A', fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
-                <div style={{ fontSize: 12, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </>
       )}
 
@@ -454,8 +492,6 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
   const today = new Date()
   const weeks = ['日', '一', '二', '三', '四', '五', '六']
 
-  const selRecords = selDay ? (dayMap[selDay]?.records || []) : []
-
   return (
     <div style={{ paddingTop: 8 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 6 }}>
@@ -487,10 +523,10 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
       {selDay && (
         <DayPanel
           date={selDay}
-          records={selRecords}
+          records={dayMap[selDay]?.records || []}
           username={username}
           onClose={() => setSelDay(null)}
-          onRefresh={() => { onRefresh() }}
+          onRefresh={() => onRefresh()}
         />
       )}
     </div>
