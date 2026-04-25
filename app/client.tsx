@@ -354,39 +354,8 @@ function StatsScreen({ records, year, month, mode, setMode }: {
     if (!byFund[key].earliestBuy || bd < byFund[key].earliestBuy!) byFund[key].earliestBuy = bd
   })
 
-  // 资金池峰值算法：模拟资金流入流出，取历史最高值作为实际本金
-  // 买入=资金流入，卖出=资金流出（卖出金额=本金+盈亏）
-  // 先用所有买入记录（不限filtered）模拟
-  const allEvents = records
-    .map(r => ({
-      date: r.record_date,
-      delta: r.type === 'buy' ? r.amount : -(r.amount + r.pnl) // 买入加，卖出减
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-
-  let pool = 0, peakPool = 0
-  allEvents.forEach(e => {
-    pool += e.delta
-    if (pool > peakPool) peakPool = pool
-  })
-
-  // filtered范围内的峰值（只看当前筛选时段的买入）
-  const filteredBuys = filtered.filter(r => r.type === 'buy')
-  const filteredSells = filtered.filter(r => r.type === 'sell')
-  const filteredEvents = [...filteredBuys, ...filteredSells]
-    .map(r => ({
-      date: r.record_date,
-      delta: r.type === 'buy' ? r.amount : -(r.amount + r.pnl)
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-
-  let fPool = 0, fPeak = 0
-  filteredEvents.forEach(e => {
-    fPool += e.delta
-    if (fPool > fPeak) fPeak = fPool
-  })
-
-  const totalInvest = fPeak > 0 ? fPeak : Object.values(byFund).reduce((s, f) => s + f.invest, 0)
+  // 总本金 = 各基金买入本金之和
+  const totalInvest = Object.values(byFund).reduce((s, f) => s + f.invest, 0)
   const overallReturn = totalInvest > 0 ? totalPnl / totalInvest * 100 : null
 
   const modes: { key: StatsMode, label: string }[] = [
@@ -407,7 +376,7 @@ function StatsScreen({ records, year, month, mode, setMode }: {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
         {[
-          { label: '实际本金', value: fmt(totalInvest), color: undefined },
+          { label: '卖出本金', value: fmt(totalInvest), color: undefined },
           { label: '总盈亏', value: (totalPnl >= 0 ? '+' : '') + fmt(totalPnl), color: totalPnl !== 0 ? pnlColor(totalPnl) : undefined },
           { label: '简单收益率', value: overallReturn !== null ? fmtPct(overallReturn) : '—', color: totalPnl !== 0 ? pnlColor(totalPnl) : undefined }
         ].map((c, i) => (
