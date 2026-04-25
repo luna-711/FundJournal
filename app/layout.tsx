@@ -1,20 +1,14 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 
-let _supabase: SupabaseClient | null = null
-function getSupabase(): SupabaseClient {
-  if (!_supabase) {
-    _supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-  }
-  return _supabase
-}
-const supabase = { from: (table: string) => getSupabase().from(table) }
+const getDB = () => createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 type RecordType = 'buy' | 'sell'
+type StatsMode = 'month' | 'year' | 'all'
 
 interface FundRecord {
   id: string
@@ -28,79 +22,42 @@ interface FundRecord {
   created_at: string
 }
 
-interface DayData {
-  records: FundRecord[]
-  totalPnl: number
-  totalBuy: number
+const fmt = (n: number) => '¥' + Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%'
+const pnlColor = (n: number) => n >= 0 ? '#E24B4A' : '#1D9E75'
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', borderRadius: 10,
+  border: '1px solid var(--bd)', background: 'var(--bg)',
+  color: 'var(--tx)', fontSize: 15, boxSizing: 'border-box', fontFamily: 'inherit'
 }
 
-function fmt(n: number) {
-  return '¥' + Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-}
-function fmtPct(n: number) {
-  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%'
-}
-function computeIRR(cashflows: { days: number; amount: number }[]): number | null {
-  const hasSell = cashflows.some(c => c.amount > 0)
-  if (!hasSell || cashflows.length < 2) return null
-  let rate = 0.1
-  for (let i = 0; i < 300; i++) {
-    let npv = 0, dnpv = 0
-    for (const c of cashflows) {
-      const t = c.days / 365
-      const disc = Math.pow(1 + rate, t)
-      npv += c.amount / disc
-      dnpv += -t * c.amount / Math.pow(1 + rate, t + 1)
-    }
-    if (Math.abs(npv) < 0.01) break
-    if (Math.abs(dnpv) < 1e-10) break
-    rate = rate - npv / dnpv
-    if (rate < -0.999) rate = -0.999
-    if (rate > 1000) rate = 1000
-  }
-  return isFinite(rate) ? rate : null
-}
-
-// ── Month Picker ───────────────────────────────────────────
-function MonthPicker({
-  year, month, onChange
-}: {
+function MonthPicker({ year, month, onChange }: {
   year: number, month: number, onChange: (y: number, m: number) => void
 }) {
   const [open, setOpen] = useState(false)
   const [calYear, setCalYear] = useState(year)
   const ref = useRef<HTMLDivElement>(null)
-  const [today, setToday] = useState<Date | null>(null)
-  useEffect(() => { setToday(new Date()) }, [])
   const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
 
+  useEffect(() => { if (open) setCalYear(year) }, [open, year])
   useEffect(() => {
-    if (open) setCalYear(year)
-  }, [open, year])
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    if (open) document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
   }, [open])
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 4,
-          background: 'var(--card)', border: '1px solid var(--bd)',
-          borderRadius: 8, padding: '5px 12px', cursor: 'pointer',
-          fontSize: 15, fontWeight: 600, color: 'var(--tx)', fontFamily: 'inherit'
-        }}
-      >
+      <button onClick={() => setOpen(o => !o)} style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        background: 'var(--card)', border: '1px solid var(--bd)',
+        borderRadius: 8, padding: '5px 12px', cursor: 'pointer',
+        fontSize: 15, fontWeight: 600, color: 'var(--tx)', fontFamily: 'inherit'
+      }}>
         {year}年{month + 1}月
         <span style={{ fontSize: 9, color: 'var(--t2)', marginLeft: 2 }}>▼</span>
       </button>
-
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
@@ -108,36 +65,22 @@ function MonthPicker({
           borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
           padding: '12px', width: 230, zIndex: 200
         }}>
-          {/* Year nav */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <button onClick={() => setCalYear(y => y - 1)} style={{
-              background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6,
-              width: 28, height: 28, cursor: 'pointer', fontSize: 14, color: 'var(--tx)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>‹</button>
+            <button onClick={() => setCalYear(y => y - 1)} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', fontSize: 14, color: 'var(--tx)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--tx)' }}>{calYear}年</span>
-            <button onClick={() => setCalYear(y => y + 1)} style={{
-              background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6,
-              width: 28, height: 28, cursor: 'pointer', fontSize: 14, color: 'var(--tx)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>›</button>
+            <button onClick={() => setCalYear(y => y + 1)} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', fontSize: 14, color: 'var(--tx)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
           </div>
-          {/* Month grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 4 }}>
             {months.map((name, i) => {
-              const isSelected = calYear === year && i === month
-              const isToday = calYear === today.getFullYear() && i === today.getMonth()
+              const isSel = calYear === year && i === month
               return (
                 <button key={i} onClick={() => { onChange(calYear, i); setOpen(false) }} style={{
                   padding: '7px 0', borderRadius: 7, fontSize: 13, cursor: 'pointer',
                   fontFamily: 'inherit', textAlign: 'center',
-                  background: isSelected ? '#1a1a1a' : 'transparent',
-                  color: isSelected ? '#fff' : 'var(--tx)',
-                  border: isToday && !isSelected ? '1px solid var(--tx)' : '1px solid transparent',
-                  fontWeight: isToday ? 600 : 400,
-                }}>
-                  {name}
-                </button>
+                  background: isSel ? '#1a1a1a' : 'transparent',
+                  color: isSel ? '#fff' : 'var(--tx)',
+                  border: '1px solid transparent', fontWeight: isSel ? 600 : 400,
+                }}>{name}</button>
               )
             })}
           </div>
@@ -147,7 +90,6 @@ function MonthPicker({
   )
 }
 
-// ── Login Screen ──────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (u: string) => void }) {
   const [val, setVal] = useState('')
   return (
@@ -155,25 +97,18 @@ function LoginScreen({ onLogin }: { onLogin: (u: string) => void }) {
       <div style={{ fontSize: 32, marginBottom: 8 }}>📒</div>
       <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--tx)', marginBottom: 6 }}>基金日记</h1>
       <p style={{ fontSize: 14, color: 'var(--t2)', marginBottom: 32 }}>记录每一笔卖出，追踪真实收益</p>
-      <input
-        style={{ width: '100%', maxWidth: 280, padding: '12px 16px', borderRadius: 12, border: '1px solid var(--bd)', background: 'var(--card)', color: 'var(--tx)', fontSize: 16, marginBottom: 12 }}
-        placeholder="输入你的用户名"
-        value={val}
+      <input style={{ width: '100%', maxWidth: 280, padding: '12px 16px', borderRadius: 12, border: '1px solid var(--bd)', background: 'var(--card)', color: 'var(--tx)', fontSize: 16, marginBottom: 12, fontFamily: 'inherit' }}
+        placeholder="输入你的用户名" value={val}
         onChange={e => setVal(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && val.trim() && onLogin(val.trim())}
       />
-      <button
-        style={{ width: '100%', maxWidth: 280, padding: '12px 16px', borderRadius: 12, background: 'var(--ac)', color: '#fff', fontSize: 16, fontWeight: 600, border: 'none', cursor: 'pointer' }}
-        onClick={() => val.trim() && onLogin(val.trim())}
-      >进入</button>
+      <button style={{ width: '100%', maxWidth: 280, padding: '12px 16px', borderRadius: 12, background: '#333', color: '#fff', fontSize: 16, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+        onClick={() => val.trim() && onLogin(val.trim())}>进入</button>
     </div>
   )
 }
 
-// ── Add Record Modal ───────────────────────────────────────
-function AddModal({
-  date, username, onClose, onSaved
-}: {
+function AddModal({ date, username, onClose, onSaved }: {
   date: string, username: string, onClose: () => void, onSaved: () => void
 }) {
   const [type, setType] = useState<RecordType>('sell')
@@ -184,27 +119,26 @@ function AddModal({
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
 
-  const lookupFund = async (c: string) => {
+  const lookup = async (c: string) => {
     if (!c || c.length < 4) return
     setLooking(true)
     try {
-      const res = await fetch(`/api/fund?code=${encodeURIComponent(c.trim())}`)
+      const res = await fetch('/api/fund?code=' + encodeURIComponent(c.trim()))
       const json = await res.json()
       if (json?.name) setName(json.name)
     } catch {}
     setLooking(false)
   }
 
+  const val = type === 'buy' ? amount : pnl
+  const canSave = !!val && !isNaN(Number(val))
+
   const save = async () => {
-    const val = type === 'buy' ? amount : pnl
-    if (!val || isNaN(Number(val))) return
+    if (!canSave) return
     setSaving(true)
-    await supabase.from('fund_records').insert({
-      username,
-      record_date: date,
-      type,
-      fund_name: name.trim(),
-      fund_code: code.trim(),
+    await getDB().from('fund_records').insert({
+      username, record_date: date, type,
+      fund_name: name.trim(), fund_code: code.trim(),
       amount: type === 'buy' ? Number(amount) : 0,
       pnl: type === 'sell' ? Number(pnl) : 0,
     })
@@ -213,16 +147,15 @@ function AddModal({
   }
 
   const d = new Date(date + 'T00:00:00')
-  const dateStr = `${d.getMonth() + 1}月${d.getDate()}日`
+  const dateStr = (d.getMonth() + 1) + '月' + d.getDate() + '日'
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 }} onClick={onClose}>
       <div style={{ background: 'var(--card)', borderRadius: '20px 20px 0 0', padding: '24px 20px', width: '100%', maxWidth: 480, paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--tx)' }}>{dateStr}添加记录</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>x</button>
         </div>
-
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           {(['buy', 'sell'] as RecordType[]).map(t => (
             <button key={t} onClick={() => setType(t)} style={{
@@ -233,62 +166,47 @@ function AddModal({
             }}>{t === 'buy' ? '买入' : '卖出'}</button>
           ))}
         </div>
-
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>基金代码</div>
-          <input
-            style={inputStyle}
-            placeholder="输入代码自动带出名称，如 510300"
-            value={code}
-            onChange={e => { setCode(e.target.value); setName('') }}
-            onBlur={e => lookupFund(e.target.value.trim())}
-          />
+          <input style={inputStyle} placeholder="输入代码自动带出名称，如 510300"
+            value={code} onChange={e => { setCode(e.target.value); setName('') }}
+            onBlur={e => lookup(e.target.value.trim())} />
         </div>
-        <div style={{ marginBottom: 10 }}>
+        <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>
-            基金名称 {looking && <span style={{ color: '#888' }}>查询中...</span>}
+            基金名称{looking ? ' 查询中...' : ''}
           </div>
           <input style={inputStyle} placeholder="自动填入，也可手动输入" value={name} onChange={e => setName(e.target.value)} />
         </div>
-
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>{type === 'buy' ? '买入金额（元）' : '盈亏金额（元）'}</div>
-          <input style={inputStyle} type="number" placeholder={type === 'buy' ? '0' : '亏损填负数'} value={type === 'buy' ? amount : pnl} onChange={e => type === 'buy' ? setAmount(e.target.value) : setPnl(e.target.value)} />
+          <input style={inputStyle} type="number" placeholder={type === 'buy' ? '0' : '亏损填负数'}
+            value={type === 'buy' ? amount : pnl}
+            onChange={e => type === 'buy' ? setAmount(e.target.value) : setPnl(e.target.value)} />
         </div>
-
-        <button onClick={save} disabled={saving || !(type === 'buy' ? amount : pnl)} style={{
+        <button onClick={save} disabled={!canSave || saving} style={{
           width: '100%', padding: '13px 0', borderRadius: 12,
-          background: saving || !(type === 'buy' ? amount : pnl) ? 'transparent' : '#333',
-          color: saving || !(type === 'buy' ? amount : pnl) ? 'var(--t2)' : '#fff',
-          fontSize: 16, fontWeight: 600,
-          border: saving || !(type === 'buy' ? amount : pnl) ? '1px solid var(--bd)' : 'none',
-          cursor: saving || !(type === 'buy' ? amount : pnl) ? 'default' : 'pointer', fontFamily: 'inherit'
+          background: canSave && !saving ? '#333' : 'transparent',
+          color: canSave && !saving ? '#fff' : 'var(--t2)',
+          border: canSave && !saving ? 'none' : '1px solid var(--bd)',
+          fontSize: 16, fontWeight: 600, cursor: canSave && !saving ? 'pointer' : 'default', fontFamily: 'inherit'
         }}>{saving ? '保存中...' : '保存'}</button>
       </div>
     </div>
   )
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--bd)',
-  background: 'var(--bg)', color: 'var(--tx)', fontSize: 15, boxSizing: 'border-box'
-}
-
-// ── Day Detail Panel ───────────────────────────────────────
-function DayPanel({
-  date, records, username, onClose, onRefresh
-}: {
+function DayPanel({ date, records, username, onClose, onRefresh }: {
   date: string, records: FundRecord[], username: string, onClose: () => void, onRefresh: () => void
 }) {
   const [showAdd, setShowAdd] = useState(false)
   const d = new Date(date + 'T00:00:00')
-  const dateStr = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+  const dateStr = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'
   const sells = records.filter(r => r.type === 'sell')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
-  const totalInvest = sells.reduce((s, r) => s + r.amount, 0)
 
   const del = async (id: string) => {
-    await supabase.from('fund_records').delete().eq('id', id)
+    await getDB().from('fund_records').delete().eq('id', id)
     onRefresh()
   }
 
@@ -297,156 +215,128 @@ function DayPanel({
       <div style={{ background: 'var(--card)', borderRadius: '20px 20px 0 0', padding: '24px 20px', width: '100%', maxWidth: 480, maxHeight: '80dvh', overflowY: 'auto', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--tx)' }}>{dateStr}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>x</button>
         </div>
-
         {sells.length > 0 && (
           <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: 'var(--t2)' }}>总盈亏</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: totalPnl >= 0 ? '#E24B4A' : '#1D9E75' }}>{totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: pnlColor(totalPnl) }}>{totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}</div>
           </div>
         )}
-
         {records.length === 0 && <div style={{ textAlign: 'center', color: 'var(--t2)', fontSize: 14, padding: '20px 0' }}>暂无记录</div>}
-
         {records.map(r => (
           <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{
-                fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 20,
-                background: r.type === 'buy' ? '#E8E8E8' : '#FDEAEA',
-                color: r.type === 'buy' ? '#666' : '#C0392B'
-              }}>{r.type === 'buy' ? '买入' : '卖出'}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 20, background: r.type === 'buy' ? '#E8E8E8' : '#FDEAEA', color: r.type === 'buy' ? '#666' : '#C0392B' }}>{r.type === 'buy' ? '买入' : '卖出'}</span>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{r.fund_name || '未命名'}</div>
                 {r.fund_code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{r.fund_code}</div>}
               </div>
             </div>
-            <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{fmt(r.amount)}</div>
-                {r.type === 'sell' && <div style={{ fontSize: 12, color: r.pnl >= 0 ? '#E24B4A' : '#1D9E75' }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ textAlign: 'right' }}>
+                {r.type === 'buy' && <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{fmt(r.amount)}</div>}
+                {r.type === 'sell' && <div style={{ fontSize: 14, fontWeight: 500, color: pnlColor(r.pnl) }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>}
               </div>
               <button onClick={() => del(r.id)} style={{ background: '#FFF0F0', border: '1px solid #FFCCCC', color: '#E24B4A', fontSize: 12, cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontFamily: 'inherit' }}>删除</button>
             </div>
           </div>
         ))}
-
-        <button onClick={() => setShowAdd(true)} style={{ width: '100%', marginTop: 16, padding: '12px 0', borderRadius: 12, border: '1px dashed var(--bd)', background: 'transparent', color: 'var(--t2)', fontSize: 14, cursor: 'pointer' }}>+ 添加记录</button>
+        <button onClick={() => setShowAdd(true)} style={{ width: '100%', marginTop: 16, padding: '12px 0', borderRadius: 12, border: '1px dashed var(--bd)', background: 'transparent', color: 'var(--t2)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>+ 添加记录</button>
       </div>
       {showAdd && <AddModal date={date} username={username} onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); onRefresh() }} />}
     </div>
   )
 }
 
-// ── Stats Screen ───────────────────────────────────────────
-type StatsMode = 'month' | 'year' | 'all'
-
 function StatsScreen({ records, year, month, mode, setMode }: {
   records: FundRecord[], year: number, month: number, mode: StatsMode, setMode: (m: StatsMode) => void
 }) {
-
-  const filtered = mode === 'all'
-    ? records
-    : mode === 'year'
-    ? records.filter(r => new Date(r.record_date).getFullYear() === year)
+  const filtered = mode === 'all' ? records
+    : mode === 'year' ? records.filter(r => new Date(r.record_date).getFullYear() === year)
     : records.filter(r => { const d = new Date(r.record_date); return d.getFullYear() === year && d.getMonth() === month })
 
   const sells = filtered.filter(r => r.type === 'sell')
+  const allBuys = records.filter(r => r.type === 'buy')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
   const totalInvest = sells.reduce((s, r) => s + r.amount, 0)
-  const totalReturn = totalInvest > 0 ? totalPnl / totalInvest * 100 : 0
 
-  // 按基金统计，用全部买入记录找最早买入日期算年化
-  const allBuys = records.filter(r => r.type === 'buy')
   const byFund: Record<string, { name: string, code: string, invest: number, pnl: number, earliestBuy: Date | null, latestSell: Date | null }> = {}
   sells.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (!byFund[key]) byFund[key] = { name: r.fund_name, code: r.fund_code, invest: 0, pnl: 0, earliestBuy: null, latestSell: null }
     byFund[key].invest += r.amount
     byFund[key].pnl += r.pnl
-    const sellDate = new Date(r.record_date)
-    if (!byFund[key].latestSell || sellDate > byFund[key].latestSell!) byFund[key].latestSell = sellDate
+    const sd = new Date(r.record_date)
+    if (!byFund[key].latestSell || sd > byFund[key].latestSell!) byFund[key].latestSell = sd
   })
-  // 找每个基金最早买入日期（从全部记录里找，不限于filtered）
   allBuys.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
-    if (!byFund[key]) return // 只关心有卖出的基金
-    const buyDate = new Date(r.record_date)
-    if (!byFund[key].earliestBuy || buyDate < byFund[key].earliestBuy!) byFund[key].earliestBuy = buyDate
+    if (!byFund[key]) return
+    const bd = new Date(r.record_date)
+    if (!byFund[key].earliestBuy || bd < byFund[key].earliestBuy!) byFund[key].earliestBuy = bd
   })
 
-  // 总体年化：用所有卖出里最早买入日 → 最晚卖出日
-  let overallAnnualized: number | null = null
-  if (totalInvest > 0) {
-    const allSellDates = sells.map(r => new Date(r.record_date))
-    const latestSell = allSellDates.length ? new Date(Math.max(...allSellDates.map(d => d.getTime()))) : null
-    // 找这些卖出基金的最早买入
-    const relevantKeys = new Set(sells.map(r => r.fund_code || r.fund_name || '未知'))
-    const relevantBuys = allBuys.filter(r => relevantKeys.has(r.fund_code || r.fund_name || '未知'))
-    const earliestBuy = relevantBuys.length
-      ? new Date(Math.min(...relevantBuys.map(r => new Date(r.record_date).getTime())))
-      : null
-    if (earliestBuy && latestSell) {
-      const days = Math.round((latestSell.getTime() - earliestBuy.getTime()) / 86400000)
-      if (days > 0) overallAnnualized = (totalPnl / totalInvest) / days * 365 * 100
-    }
+  const relevantKeys = new Set(sells.map(r => r.fund_code || r.fund_name || '未知'))
+  const relevantBuys = allBuys.filter(r => relevantKeys.has(r.fund_code || r.fund_name || '未知'))
+  let overallAnn: number | null = null
+  if (totalInvest > 0 && relevantBuys.length) {
+    const earliest = new Date(Math.min(...relevantBuys.map(r => new Date(r.record_date).getTime())))
+    const latest = new Date(Math.max(...sells.map(r => new Date(r.record_date).getTime())))
+    const days = Math.round((latest.getTime() - earliest.getTime()) / 86400000)
+    if (days > 0) overallAnn = (totalPnl / totalInvest) / days * 365 * 100
   }
 
   const modes: { key: StatsMode, label: string }[] = [
-    { key: 'month', label: '本月' },
-    { key: 'year', label: '本年' },
-    { key: 'all', label: '全部' },
+    { key: 'month', label: '本月' }, { key: 'year', label: '本年' }, { key: 'all', label: '全部' }
   ]
 
   return (
     <div style={{ padding: '0 0 2rem' }}>
-      {/* Mode toggle */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {modes.map(m => (
           <button key={m.key} onClick={() => setMode(m.key)} style={{
             flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
-            background: mode === m.key ? 'var(--tx)' : 'var(--card)',
+            background: mode === m.key ? '#333' : 'var(--card)',
             color: mode === m.key ? '#fff' : 'var(--t2)',
             fontWeight: 600, fontSize: 13, fontFamily: 'inherit'
           }}>{m.label}</button>
         ))}
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
-        <StatCard label="卖出本金" value={fmt(totalInvest)} />
-        <StatCard label="总盈亏" value={(totalPnl >= 0 ? '+' : '') + fmt(totalPnl)} color={totalPnl > 0 ? '#E24B4A' : totalPnl < 0 ? '#1D9E75' : undefined} />
-        <StatCard
-          label={overallAnnualized !== null ? '年化收益率' : '简单收益率'}
-          value={overallAnnualized !== null ? fmtPct(overallAnnualized) : totalInvest > 0 ? fmtPct(totalReturn) : '—'}
-          color={totalPnl > 0 ? '#E24B4A' : totalPnl < 0 ? '#1D9E75' : undefined}
-        />
+        {[
+          { label: '卖出本金', value: fmt(totalInvest), color: undefined },
+          { label: '总盈亏', value: (totalPnl >= 0 ? '+' : '') + fmt(totalPnl), color: totalPnl !== 0 ? pnlColor(totalPnl) : undefined },
+          { label: overallAnn !== null ? '年化收益率' : '简单收益率', value: overallAnn !== null ? fmtPct(overallAnn) : totalInvest > 0 ? fmtPct(totalPnl / totalInvest * 100) : '—', color: totalPnl !== 0 ? pnlColor(totalPnl) : undefined }
+        ].map((c, i) => (
+          <div key={i} style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px 10px' }}>
+            <div style={{ fontSize: 11, color: 'var(--t2)', marginBottom: 4 }}>{c.label}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: c.color || 'var(--tx)' }}>{c.value}</div>
+          </div>
+        ))}
       </div>
-
       {Object.keys(byFund).length > 0 && (
         <>
           <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 10 }}>按基金统计</div>
           {Object.values(byFund).sort((a, b) => b.pnl - a.pnl).map((f, i) => {
-            // 每个基金的年化
-            let annualized: number | null = null
+            let ann: number | null = null
             if (f.earliestBuy && f.latestSell && f.invest > 0) {
               const days = Math.round((f.latestSell.getTime() - f.earliestBuy.getTime()) / 86400000)
-              if (days > 0) annualized = (f.pnl / f.invest) / days * 365 * 100
+              if (days > 0) ann = (f.pnl / f.invest) / days * 365 * 100
             }
-            const pctLabel = annualized !== null ? fmtPct(annualized) + '/年' : fmtPct(f.invest > 0 ? f.pnl / f.invest * 100 : 0)
             return (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{f.name || '未命名'}</div>
                   {f.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{f.code}</div>}
                   {f.earliestBuy && <div style={{ fontSize: 11, color: 'var(--t2)' }}>
-                    买入 {f.earliestBuy.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
-                    {f.latestSell && ` → 卖出 ${f.latestSell.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}`}
+                    {f.earliestBuy.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                    {f.latestSell ? ' → ' + f.latestSell.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
                   </div>}
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 14, color: f.pnl >= 0 ? '#E24B4A' : '#1D9E75', fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
-                  <div style={{ fontSize: 12, color: f.pnl >= 0 ? '#E24B4A' : '#1D9E75' }}>{pctLabel}</div>
+                  <div style={{ fontSize: 14, color: pnlColor(f.pnl), fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
+                  <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>{ann !== null ? fmtPct(ann) + '/年' : fmtPct(f.invest > 0 ? f.pnl / f.invest * 100 : 0)}</div>
                   <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>
                 </div>
               </div>
@@ -454,43 +344,33 @@ function StatsScreen({ records, year, month, mode, setMode }: {
           })}
         </>
       )}
-
       {sells.length === 0 && <div style={{ textAlign: 'center', color: 'var(--t2)', fontSize: 14, padding: '40px 0' }}>暂无卖出记录</div>}
     </div>
   )
 }
 
-function StatCard({ label, value, color }: { label: string, value: string, color?: string }) {
-  return (
-    <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px 10px' }}>
-      <div style={{ fontSize: 11, color: 'var(--t2)', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 600, color: color || 'var(--tx)' }}>{value}</div>
-    </div>
-  )
-}
-
-// ── Calendar Screen ────────────────────────────────────────
 function CalendarScreen({ records, year, month, username, onRefresh }: {
   records: FundRecord[], year: number, month: number, username: string, onRefresh: () => void
 }) {
   const [selDay, setSelDay] = useState<string | null>(null)
-  const [showAdd, setShowAdd] = useState(false)
+  const [todayStr, setTodayStr] = useState('')
 
-  const dayMap: Record<string, DayData> = {}
+  useEffect(() => {
+    const t = new Date()
+    setTodayStr(t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'))
+  }, [])
+
+  const dayMap: Record<string, { records: FundRecord[], totalPnl: number }> = {}
   records.forEach(r => {
     const d = new Date(r.record_date)
     if (d.getFullYear() !== year || d.getMonth() !== month) return
-    const k = r.record_date
-    if (!dayMap[k]) dayMap[k] = { records: [], totalPnl: 0, totalBuy: 0 }
-    dayMap[k].records.push(r)
-    if (r.type === 'sell') dayMap[k].totalPnl += r.pnl
-    if (r.type === 'buy') dayMap[k].totalBuy += r.amount
+    if (!dayMap[r.record_date]) dayMap[r.record_date] = { records: [], totalPnl: 0 }
+    dayMap[r.record_date].records.push(r)
+    if (r.type === 'sell') dayMap[r.record_date].totalPnl += r.pnl
   })
 
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const [today, setToday] = useState<Date | null>(null)
-  useEffect(() => { setToday(new Date()) }, [])
   const weeks = ['日', '一', '二', '三', '四', '五', '六']
 
   return (
@@ -502,9 +382,9 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
         {Array(firstDay).fill(null).map((_, i) => <div key={'e' + i} />)}
         {Array(daysInMonth).fill(null).map((_, i) => {
           const d = i + 1
-          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+          const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0')
           const data = dayMap[dateStr]
-          const isToday = today !== null && today.getFullYear() === year && today.getMonth() === month && today.getDate() === d
+          const isToday = dateStr === todayStr
           const hasSell = data?.records.some(r => r.type === 'sell')
           return (
             <div key={d} onClick={() => setSelDay(dateStr)} style={{
@@ -514,29 +394,28 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
               padding: '5px 6px', cursor: 'pointer'
             }}>
               <div style={{ fontSize: 12, color: isToday ? '#E65100' : 'var(--t2)', fontWeight: isToday ? 700 : 400, marginBottom: 2 }}>{d}</div>
-              {hasSell && <div style={{ fontSize: 11, fontWeight: 600, color: data.totalPnl >= 0 ? '#E24B4A' : '#1D9E75', lineHeight: 1.3 }}>
+              {hasSell && <div style={{ fontSize: 11, fontWeight: 600, color: pnlColor(data.totalPnl), lineHeight: 1.3 }}>
                 {data.totalPnl >= 0 ? '+' : ''}{Math.round(data.totalPnl)}
               </div>}
             </div>
           )
         })}
       </div>
-
       {selDay && (
         <DayPanel
           date={selDay}
           records={dayMap[selDay]?.records || []}
           username={username}
           onClose={() => setSelDay(null)}
-          onRefresh={() => onRefresh()}
+          onRefresh={onRefresh}
         />
       )}
     </div>
   )
 }
 
-// ── Main App ───────────────────────────────────────────────
 export default function App() {
+  const [mounted, setMounted] = useState(false)
   const [username, setUsername] = useState<string | null>(null)
   const [records, setRecords] = useState<FundRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -551,11 +430,12 @@ export default function App() {
     setCurMonth(now.getMonth())
     const u = localStorage.getItem('fj_username')
     if (u) setUsername(u)
+    setMounted(true)
   }, [])
 
   const load = useCallback(async (u: string) => {
     setLoading(true)
-    const { data } = await supabase.from('fund_records').select('*').eq('username', u).order('record_date', { ascending: false })
+    const { data } = await getDB().from('fund_records').select('*').eq('username', u).order('record_date', { ascending: false })
     setRecords(data || [])
     setLoading(false)
   }, [])
@@ -568,51 +448,38 @@ export default function App() {
 
   useEffect(() => { if (username) load(username) }, [username, load])
 
+  if (!mounted) return null
   if (!username) return <LoginScreen onLogin={login} />
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      {/* Header: avatar left, month picker right */}
       <div style={{ padding: '14px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={() => { localStorage.removeItem('fj_username'); setUsername(null) }} style={{
-          width: 36, height: 36, borderRadius: '50%', background: 'var(--ac)', border: 'none',
-          color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', flexShrink: 0,
+          width: 36, height: 36, borderRadius: '50%', background: '#333', border: 'none',
+          color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit'
         }}>
           {username.slice(0, 1).toUpperCase()}
         </button>
-
-        {(tab === 'cal' || statsMode === 'month') && (
-          <MonthPicker
-            year={curYear}
-            month={curMonth}
-            onChange={(y, m) => { setCurYear(y); setCurMonth(m) }}
-          />
+        {(tab === 'cal' || statsMode === 'month') && curYear > 0 && (
+          <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
         )}
       </div>
-
-      {/* Content */}
       <div style={{ flex: 1, padding: '0 20px', overflowY: 'auto', paddingTop: 10 }}>
-        {loading ? <div style={{ textAlign: 'center', color: 'var(--t2)', padding: '40px 0', fontSize: 14 }}>加载中...</div>
+        {loading
+          ? <div style={{ textAlign: 'center', color: 'var(--t2)', padding: '40px 0', fontSize: 14 }}>加载中...</div>
           : tab === 'cal'
           ? <CalendarScreen records={records} year={curYear} month={curMonth} username={username} onRefresh={() => load(username)} />
           : <StatsScreen records={records} year={curYear} month={curMonth} mode={statsMode} setMode={setStatsMode} />
         }
       </div>
-
-      {/* Bottom tab bar */}
-      <div style={{
-        display: 'flex', borderTop: '0.5px solid var(--bd)', background: 'var(--card)',
-        paddingBottom: 'env(safe-area-inset-bottom)'
-      }}>
+      <div style={{ display: 'flex', borderTop: '0.5px solid var(--bd)', background: 'var(--card)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {(['cal', 'stats'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             flex: 1, padding: '14px 0', border: 'none', background: 'transparent', cursor: 'pointer',
             color: tab === t ? 'var(--tx)' : 'var(--t2)', fontWeight: tab === t ? 700 : 400,
             fontSize: 14, fontFamily: 'inherit'
-          }}>
-            {t === 'cal' ? '日历' : '统计'}
-          </button>
+          }}>{t === 'cal' ? '日历' : '统计'}</button>
         ))}
       </div>
     </div>
