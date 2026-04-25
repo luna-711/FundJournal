@@ -22,7 +22,7 @@ interface FundRecord {
   created_at: string
 }
 
-const fmt = (n: number) => '¥' + Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const fmt = (n: number) => '¥' + Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%'
 const pnlColor = (n: number) => n >= 0 ? '#E24B4A' : '#1D9E75'
 
@@ -259,23 +259,30 @@ function StatsScreen({ records, year, month, mode, setMode }: {
   const sells = filtered.filter(r => r.type === 'sell')
   const allBuys = records.filter(r => r.type === 'buy')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
-  const totalInvest = sells.reduce((s, r) => s + r.amount, 0)
 
+  // 本金从买入记录累加，按基金代码匹配
   const byFund: Record<string, { name: string, code: string, invest: number, pnl: number, earliestBuy: Date | null, latestSell: Date | null }> = {}
+
+  // 先从卖出记录建立基金列表
   sells.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (!byFund[key]) byFund[key] = { name: r.fund_name, code: r.fund_code, invest: 0, pnl: 0, earliestBuy: null, latestSell: null }
-    byFund[key].invest += r.amount
     byFund[key].pnl += r.pnl
     const sd = new Date(r.record_date)
     if (!byFund[key].latestSell || sd > byFund[key].latestSell!) byFund[key].latestSell = sd
   })
+
+  // 从买入记录累加本金，并找最早买入日
   allBuys.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (!byFund[key]) return
+    byFund[key].invest += r.amount
     const bd = new Date(r.record_date)
     if (!byFund[key].earliestBuy || bd < byFund[key].earliestBuy!) byFund[key].earliestBuy = bd
   })
+
+  // 总本金 = 所有基金买入本金之和
+  const totalInvest = Object.values(byFund).reduce((s, f) => s + f.invest, 0)
 
   const relevantKeys = new Set(sells.map(r => r.fund_code || r.fund_name || '未知'))
   const relevantBuys = allBuys.filter(r => relevantKeys.has(r.fund_code || r.fund_name || '未知'))
@@ -360,13 +367,14 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
     setTodayStr(t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'))
   }, [])
 
-  const dayMap: Record<string, { records: FundRecord[], totalPnl: number }> = {}
+  const dayMap: Record<string, { records: FundRecord[], totalPnl: number, totalBuy: number }> = {}
   records.forEach(r => {
     const d = new Date(r.record_date)
     if (d.getFullYear() !== year || d.getMonth() !== month) return
-    if (!dayMap[r.record_date]) dayMap[r.record_date] = { records: [], totalPnl: 0 }
+    if (!dayMap[r.record_date]) dayMap[r.record_date] = { records: [], totalPnl: 0, totalBuy: 0 }
     dayMap[r.record_date].records.push(r)
     if (r.type === 'sell') dayMap[r.record_date].totalPnl += r.pnl
+    if (r.type === 'buy') dayMap[r.record_date].totalBuy += r.amount
   })
 
   const firstDay = new Date(year, month, 1).getDay()
@@ -395,7 +403,10 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
             }}>
               <div style={{ fontSize: 12, color: isToday ? '#E65100' : 'var(--t2)', fontWeight: isToday ? 700 : 400, marginBottom: 2 }}>{d}</div>
               {hasSell && <div style={{ fontSize: 11, fontWeight: 600, color: pnlColor(data.totalPnl), lineHeight: 1.3 }}>
-                {data.totalPnl >= 0 ? '+' : ''}{Math.round(data.totalPnl)}
+                {data.totalPnl >= 0 ? '+' : ''}{Math.abs(data.totalPnl).toFixed(2)}
+              </div>}
+              {!hasSell && data?.totalBuy > 0 && <div style={{ fontSize: 11, fontWeight: 600, color: '#999', lineHeight: 1.3 }}>
+                {data.totalBuy.toFixed(2)}
               </div>}
             </div>
           )
