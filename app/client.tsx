@@ -196,10 +196,81 @@ function AddModal({ date, username, onClose, onSaved }: {
   )
 }
 
+function EditModal({ record, onClose, onSaved }: {
+  record: FundRecord, onClose: () => void, onSaved: () => void
+}) {
+  const [name, setName] = useState(record.fund_name)
+  const [code, setCode] = useState(record.fund_code)
+  const [amount, setAmount] = useState(record.type === 'buy' ? String(record.amount) : String(record.pnl))
+  const [saving, setSaving] = useState(false)
+  const [looking, setLooking] = useState(false)
+
+  const lookup = async (c: string) => {
+    if (!c || c.length < 4) return
+    setLooking(true)
+    try {
+      const res = await fetch('/api/fund?code=' + encodeURIComponent(c.trim()))
+      const json = await res.json()
+      if (json?.name) setName(json.name)
+    } catch {}
+    setLooking(false)
+  }
+
+  const canSave = !!amount && !isNaN(Number(amount))
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+    await getDB().from('fund_records').update({
+      fund_name: name.trim(),
+      fund_code: code.trim(),
+      amount: record.type === 'buy' ? Number(amount) : 0,
+      pnl: record.type === 'sell' ? Number(amount) : 0,
+    }).eq('id', record.id)
+    setSaving(false)
+    onSaved()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 150 }} onClick={onClose}>
+      <div style={{ background: 'var(--card)', borderRadius: '20px 20px 0 0', padding: '24px 20px', width: '100%', maxWidth: 480, paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--tx)' }}>编辑记录</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>x</button>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>基金代码</div>
+          <input style={inputStyle} value={code}
+            onChange={e => { setCode(e.target.value); setName('') }}
+            onBlur={e => lookup(e.target.value.trim())} />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>
+            基金名称{looking ? ' 查询中...' : ''}
+          </div>
+          <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>{record.type === 'buy' ? '买入金额（元）' : '盈亏金额（元）'}</div>
+          <input style={inputStyle} type="number" value={amount} onChange={e => setAmount(e.target.value)} />
+        </div>
+        <button onClick={save} disabled={!canSave || saving} style={{
+          width: '100%', padding: '13px 0', borderRadius: 12,
+          background: canSave && !saving ? '#333' : 'transparent',
+          color: canSave && !saving ? '#fff' : 'var(--t2)',
+          border: canSave && !saving ? 'none' : '1px solid var(--bd)',
+          fontSize: 16, fontWeight: 600, cursor: canSave && !saving ? 'pointer' : 'default', fontFamily: 'inherit'
+        }}>{saving ? '保存中...' : '保存'}</button>
+      </div>
+    </div>
+  )
+}
+
 function DayPanel({ date, records, username, onClose, onRefresh }: {
   date: string, records: FundRecord[], username: string, onClose: () => void, onRefresh: () => void
 }) {
   const [showAdd, setShowAdd] = useState(false)
+  const [editRecord, setEditRecord] = useState<FundRecord | null>(null)
   const d = new Date(date + 'T00:00:00')
   const dateStr = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'
   const sells = records.filter(r => r.type === 'sell')
@@ -238,6 +309,7 @@ function DayPanel({ date, records, username, onClose, onRefresh }: {
                 {r.type === 'buy' && <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{fmt(r.amount)}</div>}
                 {r.type === 'sell' && <div style={{ fontSize: 14, fontWeight: 500, color: pnlColor(r.pnl) }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>}
               </div>
+              <button onClick={() => setEditRecord(r)} style={{ background: '#F5F5F5', border: '1px solid #DDD', color: '#555', fontSize: 12, cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontFamily: 'inherit' }}>编辑</button>
               <button onClick={() => del(r.id)} style={{ background: '#FFF0F0', border: '1px solid #FFCCCC', color: '#E24B4A', fontSize: 12, cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontFamily: 'inherit' }}>删除</button>
             </div>
           </div>
@@ -245,6 +317,7 @@ function DayPanel({ date, records, username, onClose, onRefresh }: {
         <button onClick={() => setShowAdd(true)} style={{ width: '100%', marginTop: 16, padding: '12px 0', borderRadius: 12, border: '1px dashed var(--bd)', background: 'transparent', color: 'var(--t2)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>+ 添加记录</button>
       </div>
       {showAdd && <AddModal date={date} username={username} onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); onRefresh() }} />}
+      {editRecord && <EditModal record={editRecord} onClose={() => setEditRecord(null)} onSaved={() => { setEditRecord(null); onRefresh() }} />}
     </div>
   )
 }
@@ -284,15 +357,7 @@ function StatsScreen({ records, year, month, mode, setMode }: {
   // 总本金 = 所有基金买入本金之和
   const totalInvest = Object.values(byFund).reduce((s, f) => s + f.invest, 0)
 
-  const relevantKeys = new Set(sells.map(r => r.fund_code || r.fund_name || '未知'))
-  const relevantBuys = allBuys.filter(r => relevantKeys.has(r.fund_code || r.fund_name || '未知'))
-  let overallAnn: number | null = null
-  if (totalInvest > 0 && relevantBuys.length) {
-    const earliest = new Date(Math.min(...relevantBuys.map(r => new Date(r.record_date).getTime())))
-    const latest = new Date(Math.max(...sells.map(r => new Date(r.record_date).getTime())))
-    const days = Math.round((latest.getTime() - earliest.getTime()) / 86400000)
-    if (days > 0) overallAnn = (totalPnl / totalInvest) / days * 365 * 100
-  }
+  const overallReturn = totalInvest > 0 ? totalPnl / totalInvest * 100 : null
 
   const modes: { key: StatsMode, label: string }[] = [
     { key: 'month', label: '本月' }, { key: 'year', label: '本年' }, { key: 'all', label: '全部' }
@@ -314,7 +379,7 @@ function StatsScreen({ records, year, month, mode, setMode }: {
         {[
           { label: '卖出本金', value: fmt(totalInvest), color: undefined },
           { label: '总盈亏', value: (totalPnl >= 0 ? '+' : '') + fmt(totalPnl), color: totalPnl !== 0 ? pnlColor(totalPnl) : undefined },
-          { label: overallAnn !== null ? '年化收益率' : '简单收益率', value: overallAnn !== null ? fmtPct(overallAnn) : totalInvest > 0 ? fmtPct(totalPnl / totalInvest * 100) : '—', color: totalPnl !== 0 ? pnlColor(totalPnl) : undefined }
+          { label: '简单收益率', value: overallReturn !== null ? fmtPct(overallReturn) : '—', color: totalPnl !== 0 ? pnlColor(totalPnl) : undefined }
         ].map((c, i) => (
           <div key={i} style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px 10px' }}>
             <div style={{ fontSize: 11, color: 'var(--t2)', marginBottom: 4 }}>{c.label}</div>
@@ -326,11 +391,7 @@ function StatsScreen({ records, year, month, mode, setMode }: {
         <>
           <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 10 }}>按基金统计</div>
           {Object.values(byFund).sort((a, b) => b.pnl - a.pnl).map((f, i) => {
-            let ann: number | null = null
-            if (f.earliestBuy && f.latestSell && f.invest > 0) {
-              const days = Math.round((f.latestSell.getTime() - f.earliestBuy.getTime()) / 86400000)
-              if (days > 0) ann = (f.pnl / f.invest) / days * 365 * 100
-            }
+            const simpleReturn = f.invest > 0 ? f.pnl / f.invest * 100 : null
             return (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
                 <div>
@@ -343,8 +404,8 @@ function StatsScreen({ records, year, month, mode, setMode }: {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 14, color: pnlColor(f.pnl), fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
-                  <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>{ann !== null ? fmtPct(ann) + '/年' : fmtPct(f.invest > 0 ? f.pnl / f.invest * 100 : 0)}</div>
-                  <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>
+                  {simpleReturn !== null && <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>{fmtPct(simpleReturn)}</div>}
+                  {f.invest > 0 && <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>}
                 </div>
               </div>
             )
