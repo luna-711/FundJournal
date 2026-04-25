@@ -222,9 +222,9 @@ function AddModal({
           {(['buy', 'sell'] as RecordType[]).map(t => (
             <button key={t} onClick={() => setType(t)} style={{
               flex: 1, padding: '10px 0', borderRadius: 10, border: '1.5px solid',
-              borderColor: type === t ? (t === 'buy' ? '#378ADD' : '#1D9E75') : 'var(--bd)',
-              background: type === t ? (t === 'buy' ? '#E6F1FB' : '#E1F5EE') : 'transparent',
-              color: type === t ? (t === 'buy' ? '#0C447C' : '#085041') : 'var(--t2)',
+              borderColor: type === t ? (t === 'buy' ? '#999' : '#E24B4A') : 'var(--bd)',
+              background: type === t ? (t === 'buy' ? '#F0F0F0' : '#FDEAEA') : 'transparent',
+              color: type === t ? (t === 'buy' ? '#444' : '#C0392B') : 'var(--t2)',
               fontWeight: 600, fontSize: 15, cursor: 'pointer'
             }}>{t === 'buy' ? '买入' : '卖出'}</button>
           ))}
@@ -242,7 +242,7 @@ function AddModal({
         </div>
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>
-            基金名称 {looking && <span style={{ color: 'var(--ac)' }}>查询中...</span>}
+            基金名称 {looking && <span style={{ color: '#888' }}>查询中...</span>}
           </div>
           <input style={inputStyle} placeholder="自动填入，也可手动输入" value={name} onChange={e => setName(e.target.value)} />
         </div>
@@ -253,7 +253,7 @@ function AddModal({
         </div>
 
         <button onClick={save} disabled={saving || !(type === 'buy' ? amount : pnl)} style={{
-          width: '100%', padding: '13px 0', borderRadius: 12, background: saving || !(type === 'buy' ? amount : pnl) ? 'var(--bd)' : 'var(--ac)',
+          width: '100%', padding: '13px 0', borderRadius: 12, background: saving || !(type === 'buy' ? amount : pnl) ? 'var(--bd)' : '#333',
           color: '#fff', fontSize: 16, fontWeight: 600, border: 'none', cursor: saving || !(type === 'buy' ? amount : pnl) ? 'default' : 'pointer'
         }}>{saving ? '保存中...' : '保存'}</button>
       </div>
@@ -295,8 +295,8 @@ function DayPanel({
         {sells.length > 0 && (
           <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 12, display: 'flex', gap: 16 }}>
             <div><div style={{ fontSize: 11, color: 'var(--t2)' }}>卖出本金</div><div style={{ fontSize: 15, fontWeight: 600, color: 'var(--tx)' }}>{fmt(totalInvest)}</div></div>
-            <div><div style={{ fontSize: 11, color: 'var(--t2)' }}>总盈亏</div><div style={{ fontSize: 15, fontWeight: 600, color: totalPnl >= 0 ? '#1D9E75' : '#E24B4A' }}>{totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}</div></div>
-            {totalInvest > 0 && <div><div style={{ fontSize: 11, color: 'var(--t2)' }}>收益率</div><div style={{ fontSize: 15, fontWeight: 600, color: totalPnl >= 0 ? '#1D9E75' : '#E24B4A' }}>{fmtPct(totalPnl / totalInvest * 100)}</div></div>}
+            <div><div style={{ fontSize: 11, color: 'var(--t2)' }}>总盈亏</div><div style={{ fontSize: 15, fontWeight: 600, color: totalPnl >= 0 ? '#E24B4A' : '#1D9E75' }}>{totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}</div></div>
+            {totalInvest > 0 && <div><div style={{ fontSize: 11, color: 'var(--t2)' }}>收益率</div><div style={{ fontSize: 15, fontWeight: 600, color: totalPnl >= 0 ? '#E24B4A' : '#1D9E75' }}>{fmtPct(totalPnl / totalInvest * 100)}</div></div>}
           </div>
         )}
 
@@ -307,8 +307,8 @@ function DayPanel({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{
                 fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 20,
-                background: r.type === 'buy' ? '#E6F1FB' : '#E1F5EE',
-                color: r.type === 'buy' ? '#0C447C' : '#085041'
+                background: r.type === 'buy' ? '#E8E8E8' : '#FDEAEA',
+                color: r.type === 'buy' ? '#666' : '#C0392B'
               }}>{r.type === 'buy' ? '买入' : '卖出'}</span>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{r.fund_name || '未命名'}</div>
@@ -318,7 +318,7 @@ function DayPanel({
             <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 10 }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{fmt(r.amount)}</div>
-                {r.type === 'sell' && <div style={{ fontSize: 12, color: r.pnl >= 0 ? '#1D9E75' : '#E24B4A' }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>}
+                {r.type === 'sell' && <div style={{ fontSize: 12, color: r.pnl >= 0 ? '#E24B4A' : '#1D9E75' }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>}
               </div>
               <button onClick={() => del(r.id)} style={{ background: 'none', border: 'none', color: '#E24B4A', fontSize: 12, cursor: 'pointer', padding: '4px 6px' }}>删除</button>
             </div>
@@ -408,11 +408,11 @@ function StatsScreen({ records, year, month, mode, setMode }: {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
         <StatCard label="卖出本金" value={fmt(totalInvest)} />
-        <StatCard label="总盈亏" value={(totalPnl >= 0 ? '+' : '') + fmt(totalPnl)} color={totalPnl > 0 ? '#1D9E75' : totalPnl < 0 ? '#E24B4A' : undefined} />
+        <StatCard label="总盈亏" value={(totalPnl >= 0 ? '+' : '') + fmt(totalPnl)} color={totalPnl > 0 ? '#E24B4A' : totalPnl < 0 ? '#1D9E75' : undefined} />
         <StatCard
           label={overallAnnualized !== null ? '年化收益率' : '简单收益率'}
           value={overallAnnualized !== null ? fmtPct(overallAnnualized) : totalInvest > 0 ? fmtPct(totalReturn) : '—'}
-          color={totalPnl > 0 ? '#1D9E75' : totalPnl < 0 ? '#E24B4A' : undefined}
+          color={totalPnl > 0 ? '#E24B4A' : totalPnl < 0 ? '#1D9E75' : undefined}
         />
       </div>
 
@@ -438,8 +438,8 @@ function StatsScreen({ records, year, month, mode, setMode }: {
                   </div>}
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 14, color: f.pnl >= 0 ? '#1D9E75' : '#E24B4A', fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
-                  <div style={{ fontSize: 12, color: f.pnl >= 0 ? '#1D9E75' : '#E24B4A' }}>{pctLabel}</div>
+                  <div style={{ fontSize: 14, color: f.pnl >= 0 ? '#E24B4A' : '#1D9E75', fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
+                  <div style={{ fontSize: 12, color: f.pnl >= 0 ? '#E24B4A' : '#1D9E75' }}>{pctLabel}</div>
                   <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>
                 </div>
               </div>
@@ -500,12 +500,12 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
           const hasSell = data?.records.some(r => r.type === 'sell')
           return (
             <div key={d} onClick={() => setSelDay(dateStr)} style={{
-              minHeight: 62, borderRadius: 10, border: `1.5px solid ${isToday ? 'var(--ac)' : data ? 'var(--bd)' : 'transparent'}`,
+              minHeight: 62, borderRadius: 10, border: `1.5px solid ${isToday ? '#333' : data ? 'var(--bd)' : 'transparent'}`,
               background: data ? 'var(--card)' : 'transparent',
               padding: '5px 6px', cursor: 'pointer'
             }}>
-              <div style={{ fontSize: 12, color: isToday ? 'var(--ac)' : 'var(--t2)', fontWeight: isToday ? 700 : 400, marginBottom: 2 }}>{d}</div>
-              {hasSell && <div style={{ fontSize: 11, fontWeight: 600, color: data.totalPnl >= 0 ? '#1D9E75' : '#E24B4A', lineHeight: 1.3 }}>
+              <div style={{ fontSize: 12, color: isToday ? 'var(--tx)' : 'var(--t2)', fontWeight: isToday ? 700 : 400, marginBottom: 2 }}>{d}</div>
+              {hasSell && <div style={{ fontSize: 11, fontWeight: 600, color: data.totalPnl >= 0 ? '#E24B4A' : '#1D9E75', lineHeight: 1.3 }}>
                 {data.totalPnl >= 0 ? '+' : ''}{Math.round(data.totalPnl)}
               </div>}
             </div>
@@ -596,7 +596,7 @@ export default function App() {
         {(['cal', 'stats'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             flex: 1, padding: '14px 0', border: 'none', background: 'transparent', cursor: 'pointer',
-            color: tab === t ? 'var(--ac)' : 'var(--t2)', fontWeight: tab === t ? 700 : 400,
+            color: tab === t ? 'var(--tx)' : 'var(--t2)', fontWeight: tab === t ? 700 : 400,
             fontSize: 14, fontFamily: 'inherit'
           }}>
             {t === 'cal' ? '日历' : '统计'}
