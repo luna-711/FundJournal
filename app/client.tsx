@@ -297,20 +297,20 @@ function DayPanel({ date, records, username, onClose, onRefresh }: {
         {records.length === 0 && <div style={{ textAlign: 'center', color: 'var(--t2)', fontSize: 14, padding: '20px 0' }}>暂无记录</div>}
         {records.map(r => (
           <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 20, background: r.type === 'buy' ? '#E8E8E8' : '#FDEAEA', color: r.type === 'buy' ? '#666' : '#C0392B' }}>{r.type === 'buy' ? '买入' : '卖出'}</span>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{r.fund_name || '未命名'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 20, background: r.type === 'buy' ? '#E8E8E8' : '#FDEAEA', color: r.type === 'buy' ? '#666' : '#C0392B', flexShrink: 0 }}>{r.type === 'buy' ? '买入' : '卖出'}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.fund_name || '未命名'}</div>
                 {r.fund_code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{r.fund_code}</div>}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               <div style={{ textAlign: 'right' }}>
                 {r.type === 'buy' && <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{fmt(r.amount)}</div>}
                 {r.type === 'sell' && <div style={{ fontSize: 14, fontWeight: 500, color: pnlColor(r.pnl) }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>}
               </div>
-              <button onClick={() => setEditRecord(r)} style={{ background: '#F5F5F5', border: '1px solid #DDD', color: '#555', fontSize: 12, cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontFamily: 'inherit' }}>编辑</button>
-              <button onClick={() => del(r.id)} style={{ background: '#FFF0F0', border: '1px solid #FFCCCC', color: '#E24B4A', fontSize: 12, cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontFamily: 'inherit' }}>删除</button>
+              <button onClick={() => setEditRecord(r)} style={{ background: '#F5F5F5', border: '1px solid #DDD', color: '#555', fontSize: 12, cursor: 'pointer', padding: '4px 8px', borderRadius: 6, fontFamily: 'inherit', flexShrink: 0 }}>编辑</button>
+              <button onClick={() => del(r.id)} style={{ background: '#FFF0F0', border: '1px solid #FFCCCC', color: '#E24B4A', fontSize: 12, cursor: 'pointer', padding: '4px 8px', borderRadius: 6, fontFamily: 'inherit', flexShrink: 0 }}>删除</button>
             </div>
           </div>
         ))}
@@ -463,11 +463,11 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
               padding: '5px 6px', cursor: 'pointer'
             }}>
               <div style={{ fontSize: 12, color: isToday ? '#E65100' : 'var(--t2)', fontWeight: isToday ? 700 : 400, marginBottom: 2 }}>{d}</div>
+              {data?.totalBuy > 0 && <div style={{ fontSize: 11, fontWeight: 600, color: '#999', lineHeight: 1.3 }}>
+                {data.totalBuy.toFixed(2)}
+              </div>}
               {hasSell && <div style={{ fontSize: 11, fontWeight: 600, color: pnlColor(data.totalPnl), lineHeight: 1.3 }}>
                 {data.totalPnl >= 0 ? '+' : ''}{Math.abs(data.totalPnl).toFixed(2)}
-              </div>}
-              {!hasSell && data?.totalBuy > 0 && <div style={{ fontSize: 11, fontWeight: 600, color: '#999', lineHeight: 1.3 }}>
-                {data.totalBuy.toFixed(2)}
               </div>}
             </div>
           )
