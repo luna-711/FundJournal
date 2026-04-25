@@ -2,13 +2,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
+let _supabase: SupabaseClient | null = null
 function getSupabase(): SupabaseClient {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+  }
+  return _supabase
 }
-const supabase = typeof window !== 'undefined' ? getSupabase() : null as any
+const supabase = { from: (table: string) => getSupabase().from(table) }
 
 type RecordType = 'buy' | 'sell'
 
