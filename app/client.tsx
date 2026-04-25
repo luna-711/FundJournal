@@ -252,9 +252,9 @@ function AddModal({
           <input style={inputStyle} type="number" placeholder={type === 'buy' ? '0' : '亏损填负数'} value={type === 'buy' ? amount : pnl} onChange={e => type === 'buy' ? setAmount(e.target.value) : setPnl(e.target.value)} />
         </div>
 
-        <button onClick={save} disabled={saving || !amount} style={{
-          width: '100%', padding: '13px 0', borderRadius: 12, background: saving || !amount ? 'var(--bd)' : 'var(--ac)',
-          color: '#fff', fontSize: 16, fontWeight: 600, border: 'none', cursor: saving || !amount ? 'default' : 'pointer'
+        <button onClick={save} disabled={saving || !(type === 'buy' ? amount : pnl)} style={{
+          width: '100%', padding: '13px 0', borderRadius: 12, background: saving || !(type === 'buy' ? amount : pnl) ? 'var(--bd)' : 'var(--ac)',
+          color: '#fff', fontSize: 16, fontWeight: 600, border: 'none', cursor: saving || !(type === 'buy' ? amount : pnl) ? 'default' : 'pointer'
         }}>{saving ? '保存中...' : '保存'}</button>
       </div>
     </div>
