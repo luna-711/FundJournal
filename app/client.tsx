@@ -177,6 +177,18 @@ function AddModal({
   const [amount, setAmount] = useState('')
   const [pnl, setPnl] = useState('')
   const [saving, setSaving] = useState(false)
+  const [looking, setLooking] = useState(false)
+
+  const lookupFund = async (c: string) => {
+    if (!c || c.length < 4) return
+    setLooking(true)
+    try {
+      const res = await fetch(`/api/fund?code=${encodeURIComponent(c.trim())}`)
+      const json = await res.json()
+      if (json?.name) setName(json.name)
+    } catch {}
+    setLooking(false)
+  }
 
   const save = async () => {
     if (!amount || isNaN(Number(amount))) return
@@ -217,15 +229,21 @@ function AddModal({
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>基金名称</div>
-            <input style={inputStyle} placeholder="如：沪深300ETF" value={name} onChange={e => setName(e.target.value)} />
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>基金代码</div>
+          <input
+            style={inputStyle}
+            placeholder="输入代码自动带出名称，如 510300"
+            value={code}
+            onChange={e => { setCode(e.target.value); setName('') }}
+            onBlur={e => lookupFund(e.target.value.trim())}
+          />
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>
+            基金名称 {looking && <span style={{ color: 'var(--ac)' }}>查询中...</span>}
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>基金代码</div>
-            <input style={inputStyle} placeholder="如：510300" value={code} onChange={e => setCode(e.target.value)} />
-          </div>
+          <input style={inputStyle} placeholder="自动填入，也可手动输入" value={name} onChange={e => setName(e.target.value)} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: type === 'sell' ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 20 }}>
