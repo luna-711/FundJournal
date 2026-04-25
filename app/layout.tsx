@@ -13,7 +13,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#1D9E75',
+  themeColor: '#333333',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             --tx: #1a1a1a;
             --t2: #888;
             --bd: #E5E5E0;
-            --ac: #1D9E75;
+            --ac: #333333;
           }
           @media (prefers-color-scheme: dark) {
             :root {
@@ -39,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               --tx: #f0f0f0;
               --t2: #888;
               --bd: #333;
-              --ac: #1D9E75;
+              --ac: #333333;
             }
           }
           * { box-sizing: border-box; }
