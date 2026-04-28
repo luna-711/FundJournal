@@ -471,7 +471,7 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
                   {simpleReturn !== null && (
                     <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>
                       {fmtPct(simpleReturn)}
-                      {annualized !== null && <span style={{ color: 'var(--t2)', fontWeight: 400 }}>{' (折合年化 '}{fmtPct(annualized)}{')'}</span>}
+                      {annualized !== null && <span style={{ color: 'var(--t2)', fontWeight: 400 }}>{' (年化 '}{fmtPct(annualized)}{')'}</span>}
                     </div>
                   )}
                   {f.invest > 0 && <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>}
