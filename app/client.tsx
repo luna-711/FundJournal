@@ -379,8 +379,6 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
   statsYear: number, setStatsYear: (y: number) => void,
   onSwipe: (dir: 'left' | 'right') => void
 }) {
-  const touchRef = useRef<{ x: number, y: number } | null>(null)
-
   const filtered = mode === 'all' ? records
     : mode === 'year' ? records.filter(r => new Date(r.record_date).getFullYear() === statsYear)
     : records.filter(r => { const d = new Date(r.record_date); return d.getFullYear() === year && d.getMonth() === month })
@@ -415,14 +413,7 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
   return (
     <div
       style={{ padding: '0 0 2rem' }}
-      onTouchStart={e => { touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
-      onTouchEnd={e => {
-        if (!touchRef.current) return
-        const dx = e.changedTouches[0].clientX - touchRef.current.x
-        const dy = Math.abs(e.changedTouches[0].clientY - touchRef.current.y)
-        if (Math.abs(dx) > 60 && dy < 60) onSwipe(dx < 0 ? 'left' : 'right')
-        touchRef.current = null
-      }}
+
     >
       {/* Mode tabs + year picker */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
@@ -436,7 +427,7 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
             }}>{m.label}</button>
           ))}
         </div>
-        {mode === 'year' && <YearPicker year={statsYear} onChange={setStatsYear} />}
+
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
@@ -489,7 +480,6 @@ function CalendarScreen({ records, year, month, username, onRefresh, onSwipe }: 
 }) {
   const [selDay, setSelDay] = useState<string | null>(null)
   const [todayStr, setTodayStr] = useState('')
-  const touchRef = useRef<{ x: number, y: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -512,18 +502,7 @@ function CalendarScreen({ records, year, month, username, onRefresh, onSwipe }: 
   const weeks = ['日', '一', '二', '三', '四', '五', '六']
 
   return (
-    <div
-      ref={containerRef}
-      style={{ paddingTop: 8 }}
-      onTouchStart={e => { touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
-      onTouchEnd={e => {
-        if (!touchRef.current) return
-        const dx = e.changedTouches[0].clientX - touchRef.current.x
-        const dy = Math.abs(e.changedTouches[0].clientY - touchRef.current.y)
-        if (Math.abs(dx) > 60 && dy < 60) onSwipe(dx < 0 ? 'left' : 'right')
-        touchRef.current = null
-      }}
-    >
+    <div ref={containerRef} style={{ paddingTop: 8 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 6 }}>
         {weeks.map(w => <div key={w} style={{ textAlign: 'center', fontSize: 12, color: 'var(--t2)', padding: '4px 0' }}>{w}</div>)}
       </div>
@@ -621,7 +600,21 @@ export default function App() {
   if (!username) return <LoginScreen onLogin={login} />
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+      onTouchStart={e => { (window as any).__swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+      onTouchEnd={e => {
+        const s = (window as any).__swipeStart
+        if (!s) return
+        const dx = e.changedTouches[0].clientX - s.x
+        const dy = Math.abs(e.changedTouches[0].clientY - s.y)
+        if (Math.abs(dx) > 60 && dy < 60) {
+          if (tab === 'cal') handleCalSwipe(dx < 0 ? 'left' : 'right')
+          else handleStatsSwipe(dx < 0 ? 'left' : 'right')
+        }
+        delete (window as any).__swipeStart
+      }}
+    >
       <div style={{ padding: '14px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={() => { localStorage.removeItem('fj_username'); setUsername(null) }} style={{
           width: 36, height: 36, borderRadius: '50%', background: '#333', border: 'none',
@@ -635,6 +628,9 @@ export default function App() {
         )}
         {tab === 'stats' && statsMode === 'month' && curYear > 0 && (
           <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
+        )}
+        {tab === 'stats' && statsMode === 'year' && statsYear > 0 && (
+          <YearPicker year={statsYear} onChange={setStatsYear} />
         )}
       </div>
 
