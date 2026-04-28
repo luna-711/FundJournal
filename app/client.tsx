@@ -95,10 +95,13 @@ function MonthPicker({ year, month, onChange }: {
 }
 
 // ── Year Picker ───────────────────────────────────────────
-function YearPicker({ year, onChange }: { year: number, onChange: (y: number) => void }) {
+function YearPicker({ year, onChange, records }: { year: number, onChange: (y: number) => void, records?: FundRecord[] }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 2 + i)
+  const now = new Date().getFullYear()
+  const recordYears = records ? Array.from(new Set(records.map(r => new Date(r.record_date).getFullYear()))) : []
+  const allYears = Array.from(new Set([...recordYears, now])).sort((a, b) => b - a)
+  const years = allYears.length > 0 ? allYears : [now]
 
   useEffect(() => {
     const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
@@ -630,7 +633,7 @@ export default function App() {
           <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
         )}
         {tab === 'stats' && statsMode === 'year' && statsYear > 0 && (
-          <YearPicker year={statsYear} onChange={setStatsYear} />
+          <YearPicker year={statsYear} onChange={setStatsYear} records={records} />
         )}
       </div>
 
