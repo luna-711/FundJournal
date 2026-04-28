@@ -451,6 +451,11 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
           <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 10 }}>按基金统计</div>
           {Object.values(byFund).sort((a, b) => b.pnl - a.pnl).map((f, i) => {
             const simpleReturn = f.invest > 0 ? f.pnl / f.invest * 100 : null
+            let annualized: number | null = null
+            if (mode === 'all' && f.earliestBuy && f.latestSell && f.invest > 0) {
+              const days = Math.round((f.latestSell.getTime() - f.earliestBuy.getTime()) / 86400000)
+              if (days > 0) annualized = (f.pnl / f.invest) / days * 365 * 100
+            }
             return (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
                 <div>
@@ -463,7 +468,12 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 14, color: pnlColor(f.pnl), fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
-                  {simpleReturn !== null && <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>{fmtPct(simpleReturn)}</div>}
+                  {simpleReturn !== null && (
+                    <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>
+                      {fmtPct(simpleReturn)}
+                      {annualized !== null && <span style={{ color: 'var(--t2)', fontWeight: 400 }}>{' (折合年化 '}{fmtPct(annualized)}{')'}</span>}
+                    </div>
+                  )}
                   {f.invest > 0 && <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>}
                 </div>
               </div>
