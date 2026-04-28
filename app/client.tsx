@@ -32,6 +32,10 @@ const inputStyle: React.CSSProperties = {
   color: 'var(--tx)', fontSize: 15, boxSizing: 'border-box', fontFamily: 'inherit'
 }
 
+function prevMonth(y: number, m: number) { return m === 0 ? [y-1, 11] : [y, m-1] }
+function nextMonth(y: number, m: number) { return m === 11 ? [y+1, 0] : [y, m+1] }
+
+// ── Month Picker ──────────────────────────────────────────
 function MonthPicker({ year, month, onChange }: {
   year: number, month: number, onChange: (y: number, m: number) => void
 }) {
@@ -60,10 +64,10 @@ function MonthPicker({ year, month, onChange }: {
       </button>
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', top: 60, right: 16,
           background: 'var(--card)', border: '1px solid var(--bd)',
-          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-          padding: '12px', width: 230, zIndex: 200
+          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          padding: '12px', width: 220, zIndex: 300
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <button onClick={() => setCalYear(y => y - 1)} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', fontSize: 14, color: 'var(--tx)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
@@ -90,6 +94,52 @@ function MonthPicker({ year, month, onChange }: {
   )
 }
 
+// ── Year Picker ───────────────────────────────────────────
+function YearPicker({ year, onChange }: { year: number, onChange: (y: number) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 2 + i)
+
+  useEffect(() => {
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    if (open) document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        background: 'var(--card)', border: '1px solid var(--bd)',
+        borderRadius: 8, padding: '5px 12px', cursor: 'pointer',
+        fontSize: 15, fontWeight: 600, color: 'var(--tx)', fontFamily: 'inherit'
+      }}>
+        {year}年
+        <span style={{ fontSize: 9, color: 'var(--t2)', marginLeft: 2 }}>▼</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'fixed', top: 60, right: 16,
+          background: 'var(--card)', border: '1px solid var(--bd)',
+          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          padding: '8px', width: 140, zIndex: 300
+        }}>
+          {years.map(y => (
+            <button key={y} onClick={() => { onChange(y); setOpen(false) }} style={{
+              width: '100%', padding: '8px 0', borderRadius: 7, fontSize: 14, cursor: 'pointer',
+              fontFamily: 'inherit', textAlign: 'center',
+              background: y === year ? '#1a1a1a' : 'transparent',
+              color: y === year ? '#fff' : 'var(--tx)',
+              border: 'none', fontWeight: y === year ? 600 : 400,
+            }}>{y}年</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Login ─────────────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (u: string) => void }) {
   const [val, setVal] = useState('')
   return (
@@ -108,6 +158,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: string) => void }) {
   )
 }
 
+// ── Add Modal ─────────────────────────────────────────────
 function AddModal({ date, username, onClose, onSaved }: {
   date: string, username: string, onClose: () => void, onSaved: () => void
 }) {
@@ -154,7 +205,7 @@ function AddModal({ date, username, onClose, onSaved }: {
       <div style={{ background: 'var(--card)', borderRadius: '20px 20px 0 0', padding: '24px 20px', width: '100%', maxWidth: 480, paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--tx)' }}>{dateStr}添加记录</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>x</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           {(['buy', 'sell'] as RecordType[]).map(t => (
@@ -196,6 +247,7 @@ function AddModal({ date, username, onClose, onSaved }: {
   )
 }
 
+// ── Edit Modal ────────────────────────────────────────────
 function EditModal({ record, onClose, onSaved }: {
   record: FundRecord, onClose: () => void, onSaved: () => void
 }) {
@@ -222,8 +274,7 @@ function EditModal({ record, onClose, onSaved }: {
     if (!canSave) return
     setSaving(true)
     await getDB().from('fund_records').update({
-      fund_name: name.trim(),
-      fund_code: code.trim(),
+      fund_name: name.trim(), fund_code: code.trim(),
       amount: record.type === 'buy' ? Number(amount) : 0,
       pnl: record.type === 'sell' ? Number(amount) : 0,
     }).eq('id', record.id)
@@ -236,7 +287,7 @@ function EditModal({ record, onClose, onSaved }: {
       <div style={{ background: 'var(--card)', borderRadius: '20px 20px 0 0', padding: '24px 20px', width: '100%', maxWidth: 480, paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--tx)' }}>编辑记录</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>x</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>基金代码</div>
@@ -245,9 +296,7 @@ function EditModal({ record, onClose, onSaved }: {
             onBlur={e => lookup(e.target.value.trim())} />
         </div>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>
-            基金名称{looking ? ' 查询中...' : ''}
-          </div>
+          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>基金名称{looking ? ' 查询中...' : ''}</div>
           <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} />
         </div>
         <div style={{ marginBottom: 20 }}>
@@ -266,6 +315,7 @@ function EditModal({ record, onClose, onSaved }: {
   )
 }
 
+// ── Day Panel ─────────────────────────────────────────────
 function DayPanel({ date, records, username, onClose, onRefresh }: {
   date: string, records: FundRecord[], username: string, onClose: () => void, onRefresh: () => void
 }) {
@@ -286,7 +336,7 @@ function DayPanel({ date, records, username, onClose, onRefresh }: {
       <div style={{ background: 'var(--card)', borderRadius: '20px 20px 0 0', padding: '24px 20px', width: '100%', maxWidth: 480, maxHeight: '80dvh', overflowY: 'auto', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--tx)' }}>{dateStr}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>x</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--t2)', cursor: 'pointer' }}>×</button>
         </div>
         {sells.length > 0 && (
           <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
@@ -322,21 +372,24 @@ function DayPanel({ date, records, username, onClose, onRefresh }: {
   )
 }
 
-function StatsScreen({ records, year, month, mode, setMode }: {
-  records: FundRecord[], year: number, month: number, mode: StatsMode, setMode: (m: StatsMode) => void
+// ── Stats ─────────────────────────────────────────────────
+function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsYear, onSwipe }: {
+  records: FundRecord[], year: number, month: number,
+  mode: StatsMode, setMode: (m: StatsMode) => void,
+  statsYear: number, setStatsYear: (y: number) => void,
+  onSwipe: (dir: 'left' | 'right') => void
 }) {
+  const touchRef = useRef<{ x: number, y: number } | null>(null)
+
   const filtered = mode === 'all' ? records
-    : mode === 'year' ? records.filter(r => new Date(r.record_date).getFullYear() === year)
+    : mode === 'year' ? records.filter(r => new Date(r.record_date).getFullYear() === statsYear)
     : records.filter(r => { const d = new Date(r.record_date); return d.getFullYear() === year && d.getMonth() === month })
 
   const sells = filtered.filter(r => r.type === 'sell')
   const allBuys = records.filter(r => r.type === 'buy')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
 
-  // 本金从买入记录累加，按基金代码匹配
   const byFund: Record<string, { name: string, code: string, invest: number, pnl: number, earliestBuy: Date | null, latestSell: Date | null }> = {}
-
-  // 先从卖出记录建立基金列表
   sells.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (!byFund[key]) byFund[key] = { name: r.fund_name, code: r.fund_code, invest: 0, pnl: 0, earliestBuy: null, latestSell: null }
@@ -344,8 +397,6 @@ function StatsScreen({ records, year, month, mode, setMode }: {
     const sd = new Date(r.record_date)
     if (!byFund[key].latestSell || sd > byFund[key].latestSell!) byFund[key].latestSell = sd
   })
-
-  // 从买入记录累加本金，并找最早买入日
   allBuys.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (!byFund[key]) return
@@ -354,7 +405,6 @@ function StatsScreen({ records, year, month, mode, setMode }: {
     if (!byFund[key].earliestBuy || bd < byFund[key].earliestBuy!) byFund[key].earliestBuy = bd
   })
 
-  // 总本金 = 各基金买入本金之和
   const totalInvest = Object.values(byFund).reduce((s, f) => s + f.invest, 0)
   const overallReturn = totalInvest > 0 ? totalPnl / totalInvest * 100 : null
 
@@ -363,17 +413,32 @@ function StatsScreen({ records, year, month, mode, setMode }: {
   ]
 
   return (
-    <div style={{ padding: '0 0 2rem' }}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {modes.map(m => (
-          <button key={m.key} onClick={() => setMode(m.key)} style={{
-            flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
-            background: mode === m.key ? '#333' : 'var(--card)',
-            color: mode === m.key ? '#fff' : 'var(--t2)',
-            fontWeight: 600, fontSize: 13, fontFamily: 'inherit'
-          }}>{m.label}</button>
-        ))}
+    <div
+      style={{ padding: '0 0 2rem' }}
+      onTouchStart={e => { touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+      onTouchEnd={e => {
+        if (!touchRef.current) return
+        const dx = e.changedTouches[0].clientX - touchRef.current.x
+        const dy = Math.abs(e.changedTouches[0].clientY - touchRef.current.y)
+        if (Math.abs(dx) > 60 && dy < 60) onSwipe(dx < 0 ? 'left' : 'right')
+        touchRef.current = null
+      }}
+    >
+      {/* Mode tabs + year picker */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
+        <div style={{ display: 'flex', flex: 1, gap: 6 }}>
+          {modes.map(m => (
+            <button key={m.key} onClick={() => setMode(m.key)} style={{
+              flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: mode === m.key ? '#333' : 'var(--card)',
+              color: mode === m.key ? '#fff' : 'var(--t2)',
+              fontWeight: 600, fontSize: 13, fontFamily: 'inherit'
+            }}>{m.label}</button>
+          ))}
+        </div>
+        {mode === 'year' && <YearPicker year={statsYear} onChange={setStatsYear} />}
       </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
         {[
           { label: '卖出本金', value: fmt(totalInvest), color: undefined },
@@ -386,6 +451,7 @@ function StatsScreen({ records, year, month, mode, setMode }: {
           </div>
         ))}
       </div>
+
       {Object.keys(byFund).length > 0 && (
         <>
           <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 10 }}>按基金统计</div>
@@ -416,11 +482,15 @@ function StatsScreen({ records, year, month, mode, setMode }: {
   )
 }
 
-function CalendarScreen({ records, year, month, username, onRefresh }: {
-  records: FundRecord[], year: number, month: number, username: string, onRefresh: () => void
+// ── Calendar ──────────────────────────────────────────────
+function CalendarScreen({ records, year, month, username, onRefresh, onSwipe }: {
+  records: FundRecord[], year: number, month: number, username: string,
+  onRefresh: () => void, onSwipe: (dir: 'left' | 'right') => void
 }) {
   const [selDay, setSelDay] = useState<string | null>(null)
   const [todayStr, setTodayStr] = useState('')
+  const touchRef = useRef<{ x: number, y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const t = new Date()
@@ -442,12 +512,23 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
   const weeks = ['日', '一', '二', '三', '四', '五', '六']
 
   return (
-    <div style={{ paddingTop: 8 }}>
+    <div
+      ref={containerRef}
+      style={{ paddingTop: 8 }}
+      onTouchStart={e => { touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+      onTouchEnd={e => {
+        if (!touchRef.current) return
+        const dx = e.changedTouches[0].clientX - touchRef.current.x
+        const dy = Math.abs(e.changedTouches[0].clientY - touchRef.current.y)
+        if (Math.abs(dx) > 60 && dy < 60) onSwipe(dx < 0 ? 'left' : 'right')
+        touchRef.current = null
+      }}
+    >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 6 }}>
         {weeks.map(w => <div key={w} style={{ textAlign: 'center', fontSize: 12, color: 'var(--t2)', padding: '4px 0' }}>{w}</div>)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
-        {Array(firstDay).fill(null).map((_, i) => <div key={'e' + i} />)}
+        {Array(firstDay).fill(null).map((_, i) => <div key={'e' + i} style={{ aspectRatio: '1' }} />)}
         {Array(daysInMonth).fill(null).map((_, i) => {
           const d = i + 1
           const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0')
@@ -456,17 +537,19 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
           const hasSell = data?.records.some(r => r.type === 'sell')
           return (
             <div key={d} onClick={() => setSelDay(dateStr)} style={{
-              minHeight: 62, borderRadius: 10,
+              aspectRatio: '1',
+              borderRadius: 10,
               border: data && !isToday ? '1px solid var(--bd)' : 'none',
               background: isToday ? '#FFF3E0' : data ? 'var(--card)' : 'transparent',
-              padding: '5px 6px', cursor: 'pointer'
+              padding: '5px 4px', cursor: 'pointer',
+              display: 'flex', flexDirection: 'column'
             }}>
-              <div style={{ fontSize: 12, color: isToday ? '#E65100' : 'var(--t2)', fontWeight: isToday ? 700 : 400, marginBottom: 2 }}>{d}</div>
-              {data?.totalBuy > 0 && <div style={{ fontSize: 11, fontWeight: 600, color: '#999', lineHeight: 1.3 }}>
-                {data.totalBuy.toFixed(2)}
+              <div style={{ fontSize: 11, color: isToday ? '#E65100' : 'var(--t2)', fontWeight: isToday ? 700 : 400, marginBottom: 1 }}>{d}</div>
+              {data?.totalBuy > 0 && <div style={{ fontSize: 10, fontWeight: 600, color: '#999', lineHeight: 1.2 }}>
+                {data.totalBuy.toFixed(0)}
               </div>}
-              {hasSell && <div style={{ fontSize: 11, fontWeight: 600, color: pnlColor(data.totalPnl), lineHeight: 1.3 }}>
-                {data.totalPnl >= 0 ? '+' : ''}{Math.abs(data.totalPnl).toFixed(2)}
+              {hasSell && <div style={{ fontSize: 10, fontWeight: 600, color: pnlColor(data.totalPnl), lineHeight: 1.2 }}>
+                {data.totalPnl >= 0 ? '+' : ''}{Math.abs(data.totalPnl).toFixed(0)}
               </div>}
             </div>
           )
@@ -485,6 +568,7 @@ function CalendarScreen({ records, year, month, username, onRefresh }: {
   )
 }
 
+// ── App ───────────────────────────────────────────────────
 export default function App() {
   const [mounted, setMounted] = useState(false)
   const [username, setUsername] = useState<string | null>(null)
@@ -494,11 +578,13 @@ export default function App() {
   const [curYear, setCurYear] = useState(0)
   const [curMonth, setCurMonth] = useState(0)
   const [statsMode, setStatsMode] = useState<StatsMode>('month')
+  const [statsYear, setStatsYear] = useState(0)
 
   useEffect(() => {
     const now = new Date()
     setCurYear(now.getFullYear())
     setCurMonth(now.getMonth())
+    setStatsYear(now.getFullYear())
     const u = localStorage.getItem('fj_username')
     if (u) setUsername(u)
     setMounted(true)
@@ -519,6 +605,18 @@ export default function App() {
 
   useEffect(() => { if (username) load(username) }, [username, load])
 
+  const handleCalSwipe = (dir: 'left' | 'right') => {
+    const [ny, nm] = dir === 'left' ? nextMonth(curYear, curMonth) : prevMonth(curYear, curMonth)
+    setCurYear(ny); setCurMonth(nm)
+  }
+
+  const handleStatsSwipe = (dir: 'left' | 'right') => {
+    const order: StatsMode[] = ['month', 'year', 'all']
+    const idx = order.indexOf(statsMode)
+    if (dir === 'left' && idx < 2) setStatsMode(order[idx + 1])
+    if (dir === 'right' && idx > 0) setStatsMode(order[idx - 1])
+  }
+
   if (!mounted) return null
   if (!username) return <LoginScreen onLogin={login} />
 
@@ -532,18 +630,23 @@ export default function App() {
         }}>
           {username.slice(0, 1).toUpperCase()}
         </button>
-        {(tab === 'cal' || statsMode === 'month') && curYear > 0 && (
+        {tab === 'cal' && curYear > 0 && (
+          <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
+        )}
+        {tab === 'stats' && statsMode === 'month' && curYear > 0 && (
           <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
         )}
       </div>
+
       <div style={{ flex: 1, padding: '0 20px', overflowY: 'auto', paddingTop: 10 }}>
         {loading
           ? <div style={{ textAlign: 'center', color: 'var(--t2)', padding: '40px 0', fontSize: 14 }}>加载中...</div>
           : tab === 'cal'
-          ? <CalendarScreen records={records} year={curYear} month={curMonth} username={username} onRefresh={() => load(username)} />
-          : <StatsScreen records={records} year={curYear} month={curMonth} mode={statsMode} setMode={setStatsMode} />
+          ? <CalendarScreen records={records} year={curYear} month={curMonth} username={username} onRefresh={() => load(username!)} onSwipe={handleCalSwipe} />
+          : <StatsScreen records={records} year={curYear} month={curMonth} mode={statsMode} setMode={setStatsMode} statsYear={statsYear} setStatsYear={setStatsYear} onSwipe={handleStatsSwipe} />
         }
       </div>
+
       <div style={{ display: 'flex', borderTop: '0.5px solid var(--bd)', background: 'var(--card)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {(['cal', 'stats'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
