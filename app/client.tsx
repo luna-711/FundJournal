@@ -518,7 +518,7 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
             }}>{m.label}</button>
           ))}
         </div>
-        {mode === 'year' && <YearPicker year={statsYear} onChange={setStatsYear} />}
+
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
@@ -801,7 +801,7 @@ export default function App() {
           <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
         )}
         {tab === 'stats' && statsMode === 'year' && statsYear > 0 && (
-          <YearPicker year={statsYear} onChange={setStatsYear} records={records} />
+          <YearPicker year={statsYear} onChange={setStatsYear} />
         )}
       </div>
 
