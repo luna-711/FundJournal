@@ -805,7 +805,7 @@ export default function App() {
         )}
       </div>
 
-      <div style={{ flex: 1, padding: '0 20px', overflowY: 'auto', paddingTop: 10 }}>
+      <div style={{ flex: 1, padding: '0 20px', overflowY: 'auto', paddingTop: 10, minHeight: 0 }}>
         {loading
           ? <div style={{ textAlign: 'center', color: 'var(--t2)', padding: '40px 0', fontSize: 14 }}>加载中...</div>
           : tab === 'cal'
