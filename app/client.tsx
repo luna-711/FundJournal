@@ -185,7 +185,7 @@ function AddModal({ date, username, onClose, onSaved }: {
 
   const canSave = type === 'buy'
     ? (!!amount && !isNaN(Number(amount)))
-    : (!!pnl && !isNaN(Number(pnl)) && !!cost && !isNaN(Number(cost)))
+    : (!!pnl && !isNaN(Number(pnl)))
 
   const save = async () => {
     if (!canSave) return
@@ -243,8 +243,8 @@ function AddModal({ date, username, onClose, onSaved }: {
         {type === 'sell' && (
           <>
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>本次本金（元）</div>
-              <input style={inputStyle} type="number" placeholder="这笔卖出对应的买入成本"
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>本次本金（元）<span style={{ color: '#bbb', fontWeight: 400 }}>（部分卖出时填，全部卖出可不填）</span></div>
+              <input style={inputStyle} type="number" placeholder="不填则视为全部卖出"
                 value={cost} onChange={e => setCost(e.target.value)} />
             </div>
             <div style={{ marginBottom: 20 }}>
@@ -322,8 +322,8 @@ function EditModal({ record, onClose, onSaved }: {
         </div>
         {record.type === 'sell' && (
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>本次本金（元）</div>
-            <input style={inputStyle} type="number" value={cost} onChange={e => setCost(e.target.value)} />
+            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>本次本金（元）<span style={{ color: '#bbb', fontWeight: 400 }}>（部分卖出时填）</span></div>
+            <input style={inputStyle} type="number" placeholder="不填则视为全部卖出" value={cost} onChange={e => setCost(e.target.value)} />
           </div>
         )}
         <div style={{ marginBottom: 20 }}>
@@ -431,13 +431,14 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
     const sd = new Date(r.record_date)
     if (!byFund[key].latestSell || sd > byFund[key].latestSell!) byFund[key].latestSell = sd
   })
-  // 本金用卖出记录的cost字段，没有cost则用筛选后买入记录
+  // 本金：有填cost用cost（部分卖出），没填cost用该基金全部买入记录之和（全部卖出）
+  // 先统计每个基金的cost总和
   sells.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (r.cost && r.cost > 0) byFund[key].invest += r.cost
   })
-  // 没有cost的基金，用筛选后买入记录补充
-  filteredBuys.forEach(r => {
+  // 没有cost的基金，用全部买入记录补充
+  allBuys.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (!byFund[key]) return
     if (byFund[key].invest === 0) byFund[key].invest += r.amount
