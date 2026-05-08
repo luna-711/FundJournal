@@ -788,7 +788,7 @@ export default function App() {
   if (!username) return <LoginScreen onLogin={login} />
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', height: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ padding: '14px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={() => { localStorage.removeItem('fj_username'); setUsername(null) }} style={{
           width: 36, height: 36, borderRadius: '50%', background: '#333', border: 'none',
