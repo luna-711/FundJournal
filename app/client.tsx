@@ -95,13 +95,10 @@ function MonthPicker({ year, month, onChange }: {
 }
 
 // ── Year Picker ───────────────────────────────────────────
-function YearPicker({ year, onChange, records }: { year: number, onChange: (y: number) => void, records?: FundRecord[] }) {
+function YearPicker({ year, onChange }: { year: number, onChange: (y: number) => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const now = new Date().getFullYear()
-  const recordYears = records ? Array.from(new Set(records.map(r => new Date(r.record_date).getFullYear()))) : []
-  const allYears = Array.from(new Set([...recordYears, now])).sort((a, b) => b - a)
-  const years = allYears.length > 0 ? allYears : [now]
+  const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 2 + i)
 
   useEffect(() => {
     const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
@@ -382,12 +379,16 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
   statsYear: number, setStatsYear: (y: number) => void,
   onSwipe: (dir: 'left' | 'right') => void
 }) {
+  const touchRef = useRef<{ x: number, y: number } | null>(null)
+
   const filtered = mode === 'all' ? records
     : mode === 'year' ? records.filter(r => new Date(r.record_date).getFullYear() === statsYear)
     : records.filter(r => { const d = new Date(r.record_date); return d.getFullYear() === year && d.getMonth() === month })
 
   const sells = filtered.filter(r => r.type === 'sell')
+  // allBuys用全部记录（找最早买入日期用），filteredBuys用于统计本金
   const allBuys = records.filter(r => r.type === 'buy')
+  const filteredBuys = filtered.filter(r => r.type === 'buy')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
 
   const byFund: Record<string, { name: string, code: string, invest: number, pnl: number, earliestBuy: Date | null, latestSell: Date | null }> = {}
@@ -398,10 +399,16 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
     const sd = new Date(r.record_date)
     if (!byFund[key].latestSell || sd > byFund[key].latestSell!) byFund[key].latestSell = sd
   })
-  allBuys.forEach(r => {
+  // 本金用筛选后的买入记录
+  filteredBuys.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (!byFund[key]) return
     byFund[key].invest += r.amount
+  })
+  // 最早买入日用全部记录（跨期定投需要）
+  allBuys.forEach(r => {
+    const key = r.fund_code || r.fund_name || '未知'
+    if (!byFund[key]) return
     const bd = new Date(r.record_date)
     if (!byFund[key].earliestBuy || bd < byFund[key].earliestBuy!) byFund[key].earliestBuy = bd
   })
@@ -416,7 +423,14 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
   return (
     <div
       style={{ padding: '0 0 2rem' }}
-
+      onTouchStart={e => { touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+      onTouchEnd={e => {
+        if (!touchRef.current) return
+        const dx = e.changedTouches[0].clientX - touchRef.current.x
+        const dy = Math.abs(e.changedTouches[0].clientY - touchRef.current.y)
+        if (Math.abs(dx) > 60 && dy < 60) onSwipe(dx < 0 ? 'left' : 'right')
+        touchRef.current = null
+      }}
     >
       {/* Mode tabs + year picker */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
@@ -430,7 +444,7 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
             }}>{m.label}</button>
           ))}
         </div>
-
+        {mode === 'year' && <YearPicker year={statsYear} onChange={setStatsYear} />}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
@@ -451,11 +465,6 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
           <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 10 }}>按基金统计</div>
           {Object.values(byFund).sort((a, b) => b.pnl - a.pnl).map((f, i) => {
             const simpleReturn = f.invest > 0 ? f.pnl / f.invest * 100 : null
-            let annualized: number | null = null
-            if (mode === 'all' && f.earliestBuy && f.latestSell && f.invest > 0) {
-              const days = Math.round((f.latestSell.getTime() - f.earliestBuy.getTime()) / 86400000)
-              if (days > 0) annualized = (f.pnl / f.invest) / days * 365 * 100
-            }
             return (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
                 <div>
@@ -468,12 +477,7 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 14, color: pnlColor(f.pnl), fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
-                  {simpleReturn !== null && (
-                    <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>
-                      {fmtPct(simpleReturn)}
-                      {annualized !== null && <span style={{ color: 'var(--t2)', fontWeight: 400 }}>{' (年化 '}{fmtPct(annualized)}{')'}</span>}
-                    </div>
-                  )}
+                  {simpleReturn !== null && <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>{fmtPct(simpleReturn)}</div>}
                   {f.invest > 0 && <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>}
                 </div>
               </div>
@@ -493,6 +497,7 @@ function CalendarScreen({ records, year, month, username, onRefresh, onSwipe }: 
 }) {
   const [selDay, setSelDay] = useState<string | null>(null)
   const [todayStr, setTodayStr] = useState('')
+  const touchRef = useRef<{ x: number, y: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -515,7 +520,18 @@ function CalendarScreen({ records, year, month, username, onRefresh, onSwipe }: 
   const weeks = ['日', '一', '二', '三', '四', '五', '六']
 
   return (
-    <div ref={containerRef} style={{ paddingTop: 8 }}>
+    <div
+      ref={containerRef}
+      style={{ paddingTop: 8 }}
+      onTouchStart={e => { touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+      onTouchEnd={e => {
+        if (!touchRef.current) return
+        const dx = e.changedTouches[0].clientX - touchRef.current.x
+        const dy = Math.abs(e.changedTouches[0].clientY - touchRef.current.y)
+        if (Math.abs(dx) > 60 && dy < 60) onSwipe(dx < 0 ? 'left' : 'right')
+        touchRef.current = null
+      }}
+    >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 6 }}>
         {weeks.map(w => <div key={w} style={{ textAlign: 'center', fontSize: 12, color: 'var(--t2)', padding: '4px 0' }}>{w}</div>)}
       </div>
@@ -613,21 +629,7 @@ export default function App() {
   if (!username) return <LoginScreen onLogin={login} />
 
   return (
-    <div
-      style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
-      onTouchStart={e => { (window as any).__swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
-      onTouchEnd={e => {
-        const s = (window as any).__swipeStart
-        if (!s) return
-        const dx = e.changedTouches[0].clientX - s.x
-        const dy = Math.abs(e.changedTouches[0].clientY - s.y)
-        if (Math.abs(dx) > 60 && dy < 60) {
-          if (tab === 'cal') handleCalSwipe(dx < 0 ? 'left' : 'right')
-          else handleStatsSwipe(dx < 0 ? 'left' : 'right')
-        }
-        delete (window as any).__swipeStart
-      }}
-    >
+    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '14px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={() => { localStorage.removeItem('fj_username'); setUsername(null) }} style={{
           width: 36, height: 36, borderRadius: '50%', background: '#333', border: 'none',
@@ -641,9 +643,6 @@ export default function App() {
         )}
         {tab === 'stats' && statsMode === 'month' && curYear > 0 && (
           <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
-        )}
-        {tab === 'stats' && statsMode === 'year' && statsYear > 0 && (
-          <YearPicker year={statsYear} onChange={setStatsYear} records={records} />
         )}
       </div>
 
