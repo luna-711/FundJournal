@@ -465,12 +465,26 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
     })
     byFund[key].invest = totalCostForFund
   })
-  // 最早买入日用全部记录（跨期定投需要）
-  allBuys.forEach(r => {
-    const key = r.fund_code || r.fund_name || '未知'
-    if (!byFund[key]) return
-    const bd = new Date(r.record_date)
-    if (!byFund[key].earliestBuy || bd < byFund[key].earliestBuy!) byFund[key].earliestBuy = bd
+  // 最早买入日：找上次「全部卖出」（没填cost）之后的第一笔买入
+  fundKeys.forEach(key => {
+    const allFundSells = records
+      .filter(r => r.type === 'sell' && (r.fund_code || r.fund_name || '未知') === key)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+    const allFundBuys = records
+      .filter(r => r.type === 'buy' && (r.fund_code || r.fund_name || '未知') === key)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+    const filteredSellsForFund = sells
+      .filter(r => (r.fund_code || r.fund_name || '未知') === key)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+    if (!filteredSellsForFund.length) return
+    // 找筛选内第一笔卖出之前，最近一次「全部卖出」（cost=0）的时间点
+    const firstSell = filteredSellsForFund[0]
+    const prevFullSell = allFundSells
+      .filter(s => s.record_date < firstSell.record_date && (!s.cost || s.cost === 0))
+      .pop()
+    const fromDate = prevFullSell ? prevFullSell.record_date : '0000-00-00'
+    const firstBuyAfter = allFundBuys.find(b => b.record_date > fromDate)
+    if (firstBuyAfter) byFund[key].earliestBuy = new Date(firstBuyAfter.record_date)
   })
 
   const totalInvest = Object.values(byFund).reduce((s, f) => s + f.invest, 0)
@@ -636,13 +650,98 @@ function CalendarScreen({ records, year, month, username, onRefresh, onSwipe }: 
   )
 }
 
+
+// ── Position Screen ───────────────────────────────────────
+function PositionScreen({ records }: { records: FundRecord[] }) {
+  // 计算每个基金的持仓剩余本金
+  const allBuys = records.filter(r => r.type === 'buy')
+  const allSells = records.filter(r => r.type === 'sell')
+
+  const fundKeys = Array.from(new Set(records.map(r => r.fund_code || r.fund_name || '未知')))
+
+  const positions: { key: string, name: string, code: string, totalBuy: number, soldCost: number, remaining: number, lastBuyDate: string }[] = []
+
+  fundKeys.forEach(key => {
+    const fundBuys = allBuys
+      .filter(r => (r.fund_code || r.fund_name || '未知') === key)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+    const fundSells = allSells
+      .filter(r => (r.fund_code || r.fund_name || '未知') === key)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+
+    if (!fundBuys.length) return
+
+    // 找最后一次全部卖出之后的买入
+    const lastFullSell = [...fundSells].reverse().find(s => !s.cost || s.cost === 0)
+    const fromDate = lastFullSell ? lastFullSell.record_date : '0000-00-00'
+    const buysAfterLastFullSell = fundBuys.filter(b => b.record_date > fromDate)
+
+    if (!buysAfterLastFullSell.length) return // 全卖完了，没有持仓
+
+    const totalBuy = buysAfterLastFullSell.reduce((s, b) => s + b.amount, 0)
+
+    // 最后一次全卖之后的部分卖出
+    const partialSellsAfter = fundSells.filter(s => s.record_date > fromDate && s.cost && s.cost > 0)
+    const soldCost = partialSellsAfter.reduce((s, r) => s + (r.cost || 0), 0)
+
+    const remaining = totalBuy - soldCost
+    if (remaining <= 0) return
+
+    const name = fundBuys[fundBuys.length - 1].fund_name
+    const code = fundBuys[fundBuys.length - 1].fund_code
+    const lastBuyDate = buysAfterLastFullSell[buysAfterLastFullSell.length - 1].record_date
+
+    positions.push({ key, name, code, totalBuy, soldCost, remaining, lastBuyDate })
+  })
+
+  positions.sort((a, b) => b.remaining - a.remaining)
+
+  const totalRemaining = positions.reduce((s, p) => s + p.remaining, 0)
+
+  return (
+    <div style={{ padding: '0 0 2rem' }}>
+      {positions.length > 0 && (
+        <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '14px', marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: 'var(--t2)', marginBottom: 4 }}>总持仓本金</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--tx)' }}>{fmt(totalRemaining)}</div>
+        </div>
+      )}
+
+      {positions.length === 0 && (
+        <div style={{ textAlign: 'center', color: 'var(--t2)', fontSize: 14, padding: '60px 0' }}>暂无持仓</div>
+      )}
+
+      {positions.map((p, i) => (
+        <div key={i} style={{ padding: '12px 0', borderBottom: '0.5px solid var(--bd)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--tx)' }}>{p.name || '未命名'}</div>
+              {p.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{p.code}</div>}
+              <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>
+                最近买入 {new Date(p.lastBuyDate + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--tx)' }}>{fmt(p.remaining)}</div>
+              {p.soldCost > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--t2)' }}>已卖出 {fmt(p.soldCost)}</div>
+              )}
+              <div style={{ fontSize: 11, color: 'var(--t2)' }}>总买入 {fmt(p.totalBuy)}</div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────
 export default function App() {
   const [mounted, setMounted] = useState(false)
   const [username, setUsername] = useState<string | null>(null)
   const [records, setRecords] = useState<FundRecord[]>([])
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<'cal' | 'stats'>('cal')
+  const [tab, setTab] = useState<'cal' | 'stats' | 'pos'>('cal')
   const [curYear, setCurYear] = useState(0)
   const [curMonth, setCurMonth] = useState(0)
   const [statsMode, setStatsMode] = useState<StatsMode>('month')
@@ -698,11 +797,11 @@ export default function App() {
         }}>
           {username.slice(0, 1).toUpperCase()}
         </button>
-        {tab === 'cal' && curYear > 0 && (
+        {(tab === 'cal' || (tab === 'stats' && statsMode === 'month')) && curYear > 0 && (
           <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
         )}
-        {tab === 'stats' && statsMode === 'month' && curYear > 0 && (
-          <MonthPicker year={curYear} month={curMonth} onChange={(y, m) => { setCurYear(y); setCurMonth(m) }} />
+        {tab === 'stats' && statsMode === 'year' && statsYear > 0 && (
+          <YearPicker year={statsYear} onChange={setStatsYear} records={records} />
         )}
       </div>
 
@@ -711,17 +810,19 @@ export default function App() {
           ? <div style={{ textAlign: 'center', color: 'var(--t2)', padding: '40px 0', fontSize: 14 }}>加载中...</div>
           : tab === 'cal'
           ? <CalendarScreen records={records} year={curYear} month={curMonth} username={username} onRefresh={() => load(username!)} onSwipe={handleCalSwipe} />
-          : <StatsScreen records={records} year={curYear} month={curMonth} mode={statsMode} setMode={setStatsMode} statsYear={statsYear} setStatsYear={setStatsYear} onSwipe={handleStatsSwipe} />
+          : tab === 'stats'
+          ? <StatsScreen records={records} year={curYear} month={curMonth} mode={statsMode} setMode={setStatsMode} statsYear={statsYear} setStatsYear={setStatsYear} onSwipe={handleStatsSwipe} />
+          : <PositionScreen records={records} />
         }
       </div>
 
       <div style={{ display: 'flex', borderTop: '0.5px solid var(--bd)', background: 'var(--card)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        {(['cal', 'stats'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
+        {([['cal', '日历'], ['pos', '持仓'], ['stats', '统计']] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setTab(t as any)} style={{
             flex: 1, padding: '14px 0', border: 'none', background: 'transparent', cursor: 'pointer',
             color: tab === t ? 'var(--tx)' : 'var(--t2)', fontWeight: tab === t ? 700 : 400,
             fontSize: 14, fontFamily: 'inherit'
-          }}>{t === 'cal' ? '日历' : '统计'}</button>
+          }}>{label}</button>
         ))}
       </div>
     </div>
