@@ -19,6 +19,7 @@ interface FundRecord {
   fund_code: string
   amount: number
   pnl: number
+  cost: number
   created_at: string
 }
 
@@ -167,6 +168,7 @@ function AddModal({ date, username, onClose, onSaved }: {
   const [code, setCode] = useState('')
   const [amount, setAmount] = useState('')
   const [pnl, setPnl] = useState('')
+  const [cost, setCost] = useState('')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
 
@@ -181,8 +183,9 @@ function AddModal({ date, username, onClose, onSaved }: {
     setLooking(false)
   }
 
-  const val = type === 'buy' ? amount : pnl
-  const canSave = !!val && !isNaN(Number(val))
+  const canSave = type === 'buy'
+    ? (!!amount && !isNaN(Number(amount)))
+    : (!!pnl && !isNaN(Number(pnl)) && !!cost && !isNaN(Number(cost)))
 
   const save = async () => {
     if (!canSave) return
@@ -192,6 +195,7 @@ function AddModal({ date, username, onClose, onSaved }: {
       fund_name: name.trim(), fund_code: code.trim(),
       amount: type === 'buy' ? Number(amount) : 0,
       pnl: type === 'sell' ? Number(pnl) : 0,
+      cost: type === 'sell' ? Number(cost) : 0,
     })
     setSaving(false)
     onSaved()
@@ -229,12 +233,27 @@ function AddModal({ date, username, onClose, onSaved }: {
           </div>
           <input style={inputStyle} placeholder="自动填入，也可手动输入" value={name} onChange={e => setName(e.target.value)} />
         </div>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>{type === 'buy' ? '买入金额（元）' : '盈亏金额（元）'}</div>
-          <input style={inputStyle} type="number" placeholder={type === 'buy' ? '0' : '亏损填负数'}
-            value={type === 'buy' ? amount : pnl}
-            onChange={e => type === 'buy' ? setAmount(e.target.value) : setPnl(e.target.value)} />
-        </div>
+        {type === 'buy' && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入金额（元）</div>
+            <input style={inputStyle} type="number" placeholder="0"
+              value={amount} onChange={e => setAmount(e.target.value)} />
+          </div>
+        )}
+        {type === 'sell' && (
+          <>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>本次本金（元）</div>
+              <input style={inputStyle} type="number" placeholder="这笔卖出对应的买入成本"
+                value={cost} onChange={e => setCost(e.target.value)} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>盈亏金额（元）</div>
+              <input style={inputStyle} type="number" placeholder="亏损填负数"
+                value={pnl} onChange={e => setPnl(e.target.value)} />
+            </div>
+          </>
+        )}
         <button onClick={save} disabled={!canSave || saving} style={{
           width: '100%', padding: '13px 0', borderRadius: 12,
           background: canSave && !saving ? '#333' : 'transparent',
@@ -254,6 +273,7 @@ function EditModal({ record, onClose, onSaved }: {
   const [name, setName] = useState(record.fund_name)
   const [code, setCode] = useState(record.fund_code)
   const [amount, setAmount] = useState(record.type === 'buy' ? String(record.amount) : String(record.pnl))
+  const [cost, setCost] = useState(record.type === 'sell' ? String(record.cost || 0) : '')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
 
@@ -277,6 +297,7 @@ function EditModal({ record, onClose, onSaved }: {
       fund_name: name.trim(), fund_code: code.trim(),
       amount: record.type === 'buy' ? Number(amount) : 0,
       pnl: record.type === 'sell' ? Number(amount) : 0,
+      cost: record.type === 'sell' ? Number(cost) : 0,
     }).eq('id', record.id)
     setSaving(false)
     onSaved()
@@ -299,6 +320,12 @@ function EditModal({ record, onClose, onSaved }: {
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>基金名称{looking ? ' 查询中...' : ''}</div>
           <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} />
         </div>
+        {record.type === 'sell' && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>本次本金（元）</div>
+            <input style={inputStyle} type="number" value={cost} onChange={e => setCost(e.target.value)} />
+          </div>
+        )}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>{record.type === 'buy' ? '买入金额（元）' : '盈亏金额（元）'}</div>
           <input style={inputStyle} type="number" value={amount} onChange={e => setAmount(e.target.value)} />
@@ -357,7 +384,12 @@ function DayPanel({ date, records, username, onClose, onRefresh }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               <div style={{ textAlign: 'right' }}>
                 {r.type === 'buy' && <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{fmt(r.amount)}</div>}
-                {r.type === 'sell' && <div style={{ fontSize: 14, fontWeight: 500, color: pnlColor(r.pnl) }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>}
+                {r.type === 'sell' && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: pnlColor(r.pnl) }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)}</div>
+                    {r.cost > 0 && <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(r.cost)}</div>}
+                  </div>
+                )}
               </div>
               <button onClick={() => setEditRecord(r)} style={{ background: '#F5F5F5', border: '1px solid #DDD', color: '#555', fontSize: 12, cursor: 'pointer', padding: '4px 8px', borderRadius: 6, fontFamily: 'inherit', flexShrink: 0 }}>编辑</button>
               <button onClick={() => del(r.id)} style={{ background: '#FFF0F0', border: '1px solid #FFCCCC', color: '#E24B4A', fontSize: 12, cursor: 'pointer', padding: '4px 8px', borderRadius: 6, fontFamily: 'inherit', flexShrink: 0 }}>删除</button>
@@ -399,11 +431,16 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
     const sd = new Date(r.record_date)
     if (!byFund[key].latestSell || sd > byFund[key].latestSell!) byFund[key].latestSell = sd
   })
-  // 本金用筛选后的买入记录
+  // 本金用卖出记录的cost字段，没有cost则用筛选后买入记录
+  sells.forEach(r => {
+    const key = r.fund_code || r.fund_name || '未知'
+    if (r.cost && r.cost > 0) byFund[key].invest += r.cost
+  })
+  // 没有cost的基金，用筛选后买入记录补充
   filteredBuys.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
     if (!byFund[key]) return
-    byFund[key].invest += r.amount
+    if (byFund[key].invest === 0) byFund[key].invest += r.amount
   })
   // 最早买入日用全部记录（跨期定投需要）
   allBuys.forEach(r => {
