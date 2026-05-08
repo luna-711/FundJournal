@@ -431,17 +431,38 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
     const sd = new Date(r.record_date)
     if (!byFund[key].latestSell || sd > byFund[key].latestSell!) byFund[key].latestSell = sd
   })
-  // 本金：有填cost用cost（部分卖出），没填cost用该基金全部买入记录之和（全部卖出）
-  // 先统计每个基金的cost总和
-  sells.forEach(r => {
-    const key = r.fund_code || r.fund_name || '未知'
-    if (r.cost && r.cost > 0) byFund[key].invest += r.cost
-  })
-  // 没有cost的基金，用全部买入记录补充
-  allBuys.forEach(r => {
-    const key = r.fund_code || r.fund_name || '未知'
-    if (!byFund[key]) return
-    if (byFund[key].invest === 0) byFund[key].invest += r.amount
+  // 本金计算逻辑：
+  // 有填cost → 部分卖出，用cost
+  // 没填cost → 全部卖出，本金 = 上次卖出之后到本次卖出之前的所有买入之和
+  // 按基金分别处理，按时间顺序模拟持仓
+  const fundKeys = new Set(sells.map(r => r.fund_code || r.fund_name || '未知'))
+  fundKeys.forEach(key => {
+    const fundSells = records
+      .filter(r => r.type === 'sell' && (r.fund_code || r.fund_name || '未知') === key)
+      .filter(r => byFund[key]) // 只处理在统计范围内的卖出
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+    const fundBuys = records
+      .filter(r => r.type === 'buy' && (r.fund_code || r.fund_name || '未知') === key)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+
+    // 找出在filtered sells范围内的卖出
+    const filteredSellsForFund = sells.filter(r => (r.fund_code || r.fund_name || '未知') === key)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+
+    let totalCostForFund = 0
+    filteredSellsForFund.forEach(sellRecord => {
+      if (sellRecord.cost && sellRecord.cost > 0) {
+        // 部分卖出：直接用填写的本金
+        totalCostForFund += sellRecord.cost
+      } else {
+        // 全部卖出：找上次卖出之后、本次卖出之前的所有买入
+        const prevSell = fundSells.filter(s => s.record_date < sellRecord.record_date).pop()
+        const fromDate = prevSell ? prevSell.record_date : '0000-00-00'
+        const buysInPeriod = fundBuys.filter(b => b.record_date > fromDate && b.record_date <= sellRecord.record_date)
+        totalCostForFund += buysInPeriod.reduce((s, b) => s + b.amount, 0)
+      }
+    })
+    byFund[key].invest = totalCostForFund
   })
   // 最早买入日用全部记录（跨期定投需要）
   allBuys.forEach(r => {
