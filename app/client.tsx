@@ -437,16 +437,17 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
   // 按基金分别处理，按时间顺序模拟持仓
   const fundKeys = new Set(sells.map(r => r.fund_code || r.fund_name || '未知'))
   fundKeys.forEach(key => {
-    const fundSells = records
+    // 该基金全部历史卖出（用于确定"上次卖出"时间点）
+    const allFundSells = records
       .filter(r => r.type === 'sell' && (r.fund_code || r.fund_name || '未知') === key)
-      .filter(r => byFund[key]) // 只处理在统计范围内的卖出
       .sort((a, b) => a.record_date.localeCompare(b.record_date))
-    const fundBuys = records
+    // 该基金全部历史买入
+    const allFundBuys = records
       .filter(r => r.type === 'buy' && (r.fund_code || r.fund_name || '未知') === key)
       .sort((a, b) => a.record_date.localeCompare(b.record_date))
-
-    // 找出在filtered sells范围内的卖出
-    const filteredSellsForFund = sells.filter(r => (r.fund_code || r.fund_name || '未知') === key)
+    // 当前筛选范围内的卖出
+    const filteredSellsForFund = sells
+      .filter(r => (r.fund_code || r.fund_name || '未知') === key)
       .sort((a, b) => a.record_date.localeCompare(b.record_date))
 
     let totalCostForFund = 0
@@ -455,10 +456,10 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
         // 部分卖出：直接用填写的本金
         totalCostForFund += sellRecord.cost
       } else {
-        // 全部卖出：找上次卖出之后、本次卖出之前的所有买入
-        const prevSell = fundSells.filter(s => s.record_date < sellRecord.record_date).pop()
+        // 全部卖出：找上次卖出（含历史）之后、本次卖出之前的所有买入
+        const prevSell = allFundSells.filter(s => s.record_date < sellRecord.record_date).pop()
         const fromDate = prevSell ? prevSell.record_date : '0000-00-00'
-        const buysInPeriod = fundBuys.filter(b => b.record_date > fromDate && b.record_date <= sellRecord.record_date)
+        const buysInPeriod = allFundBuys.filter(b => b.record_date > fromDate && b.record_date <= sellRecord.record_date)
         totalCostForFund += buysInPeriod.reduce((s, b) => s + b.amount, 0)
       }
     })
