@@ -694,6 +694,7 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
     positions.push({ key, name, code, totalBuy, soldCost, remaining, lastBuyDate })
   })
 
+  const barColors = ['#FF6B6B','#FFA94D','#FFD43B','#69DB7C','#4DABF7','#CC5DE8','#F783AC','#A9E34B','#63E6BE','#748FFC']
   positions.sort((a, b) => b.remaining - a.remaining)
 
   const totalRemaining = positions.reduce((s, p) => s + p.remaining, 0)
