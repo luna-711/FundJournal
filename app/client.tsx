@@ -737,18 +737,7 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
               return <div key={i} style={{ width: pct + '%', background: barColors[i % barColors.length], height: '100%' }} />
             })}
           </div>
-          {/* 图例 */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginBottom: 16 }}>
-            {positions.map((p, i) => {
-              const pct = totalRemaining > 0 ? p.remaining / totalRemaining * 100 : 0
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t2)' }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 2, background: barColors[i % barColors.length], flexShrink: 0 }} />
-                  {p.name || '未命名'} {pct.toFixed(1)}%
-                </div>
-              )
-            })}
-          </div>
+
         </>
       )}
 
