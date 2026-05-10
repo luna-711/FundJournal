@@ -715,25 +715,24 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
         const pct = totalRemaining > 0 ? p.remaining / totalRemaining * 100 : 0
         return (
           <div key={i} style={{ padding: '12px 0', borderBottom: '0.5px solid var(--bd)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-              <div style={{ minWidth: 0, flex: 1, marginRight: 12 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--tx)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '未命名'}</div>
-                {p.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{p.code}</div>}
-                <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>
-                  最近买入 {new Date(p.lastBuyDate + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ minWidth: 0, flex: 1, marginRight: 12, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: barColors[i % barColors.length], flexShrink: 0, marginTop: 3 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '未命名'}</div>
+                  {p.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{p.code}</div>}
+                  <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>
+                    最近买入 {new Date(p.lastBuyDate + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                  </div>
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--tx)' }}>{fmt(p.remaining)}</div>
-                <div style={{ fontSize: 12, color: 'var(--t2)' }}>{pct.toFixed(1)}%</div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--tx)' }}>{fmt(p.remaining)}</div>
+                <div style={{ fontSize: 12, color: '#FF9966' }}>{pct.toFixed(1)}%</div>
                 {p.soldCost > 0 && (
                   <div style={{ fontSize: 11, color: 'var(--t2)' }}>已卖出 {fmt(p.soldCost)}</div>
                 )}
               </div>
-            </div>
-            {/* 占比进度条 */}
-            <div style={{ height: 4, borderRadius: 2, background: 'var(--bd)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', borderRadius: 2, background: '#333', width: pct + '%' }} />
             </div>
           </div>
         )
