@@ -702,7 +702,9 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
   // 月度买入数据
   const monthlyBuys: Record<string, Record<string, number>> = {}
   positions.forEach(p => {
-    const fundBuys = allBuys.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)
+    const fundBuys = allBuys
+      .filter(r => (r.fund_code || r.fund_name || '未知') === p.key)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
     const lastFullSell = [...allSells.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)]
       .sort((a, b) => a.record_date.localeCompare(b.record_date))
       .reverse().find(s => !s.cost || s.cost === 0)
@@ -714,8 +716,10 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
       byMonth[mk] = (byMonth[mk] || 0) + b.amount
     })
     monthlyBuys[p.key] = byMonth
-    // earliest buy date
+    // earliest buy date - first buy after last full sell
     if (buys.length) p.earliestBuyDate = buys[0].record_date
+    // last buy date
+    if (buys.length) p.lastBuyDate = buys[buys.length - 1].record_date
   })
 
   return (
@@ -740,7 +744,7 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t2)' }}>
                   <div style={{ width: 8, height: 8, borderRadius: 2, background: barColors[i % barColors.length], flexShrink: 0 }} />
-                  {p.name?.slice(0, 6)} {pct.toFixed(1)}%
+                  {p.name || '未命名'} {pct.toFixed(1)}%
                 </div>
               )
             })}
