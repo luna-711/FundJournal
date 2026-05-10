@@ -659,7 +659,7 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
 
   const fundKeys = Array.from(new Set(records.map(r => r.fund_code || r.fund_name || '未知')))
 
-  const positions: { key: string, name: string, code: string, totalBuy: number, soldCost: number, remaining: number, lastBuyDate: string }[] = []
+  const positions: { key: string, name: string, code: string, totalBuy: number, soldCost: number, remaining: number, lastBuyDate: string, earliestBuyDate?: string }[] = []
 
   fundKeys.forEach(key => {
     const fundBuys = allBuys
@@ -699,13 +699,53 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
 
   const totalRemaining = positions.reduce((s, p) => s + p.remaining, 0)
 
+  // 月度买入数据
+  const monthlyBuys: Record<string, Record<string, number>> = {}
+  positions.forEach(p => {
+    const fundBuys = allBuys.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)
+    const lastFullSell = [...allSells.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)]
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+      .reverse().find(s => !s.cost || s.cost === 0)
+    const fromDate = lastFullSell ? lastFullSell.record_date : '0000-00-00'
+    const buys = fundBuys.filter(b => b.record_date > fromDate)
+    const byMonth: Record<string, number> = {}
+    buys.forEach(b => {
+      const mk = b.record_date.slice(0, 7)
+      byMonth[mk] = (byMonth[mk] || 0) + b.amount
+    })
+    monthlyBuys[p.key] = byMonth
+    // earliest buy date
+    if (buys.length) p.earliestBuyDate = buys[0].record_date
+  })
+
   return (
     <div style={{ padding: '0 0 2rem' }}>
       {positions.length > 0 && (
-        <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '14px', marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: 'var(--t2)', marginBottom: 4 }}>总持仓本金</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--tx)' }}>{fmt(totalRemaining)}</div>
-        </div>
+        <>
+          <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '14px', marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--t2)', marginBottom: 4 }}>总持仓本金</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--tx)' }}>{fmt(totalRemaining)}</div>
+          </div>
+          {/* 整体占比进度条 */}
+          <div style={{ height: 8, borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+            {positions.map((p, i) => {
+              const pct = totalRemaining > 0 ? p.remaining / totalRemaining * 100 : 0
+              return <div key={i} style={{ width: pct + '%', background: barColors[i % barColors.length], height: '100%' }} />
+            })}
+          </div>
+          {/* 图例 */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginBottom: 16 }}>
+            {positions.map((p, i) => {
+              const pct = totalRemaining > 0 ? p.remaining / totalRemaining * 100 : 0
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t2)' }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: barColors[i % barColors.length], flexShrink: 0 }} />
+                  {p.name?.slice(0, 6)} {pct.toFixed(1)}%
+                </div>
+              )
+            })}
+          </div>
+        </>
       )}
 
       {positions.length === 0 && (
@@ -714,30 +754,115 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
 
       {positions.map((p, i) => {
         const pct = totalRemaining > 0 ? p.remaining / totalRemaining * 100 : 0
+        const byMonth = monthlyBuys[p.key] || {}
+        const maxVal = Math.max(...Object.values(byMonth), 1)
+        const barColor = barColors[i % barColors.length]
+        const barColorDim = barColor + '55'
+
+        // 从最早买入月到当前月
+        const now = new Date()
+        const earliest = p.earliestBuyDate ? new Date(p.earliestBuyDate + 'T00:00:00') : now
+        const monthsAll: { key: string, year: number, month: number }[] = []
+        const cur = new Date(earliest.getFullYear(), earliest.getMonth(), 1)
+        const endM = new Date(now.getFullYear(), now.getMonth(), 1)
+        while (cur <= endM) {
+          monthsAll.push({ key: cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0'), year: cur.getFullYear(), month: cur.getMonth() + 1 })
+          cur.setMonth(cur.getMonth() + 1)
+        }
+
         return (
-          <div key={i} style={{ padding: '12px 0', borderBottom: '0.5px solid var(--bd)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ minWidth: 0, flex: 1, marginRight: 12, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 2, background: barColors[i % barColors.length], flexShrink: 0, marginTop: 3 }} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '未命名'}</div>
-                  {p.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{p.code}</div>}
-                  <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>
-                    最近买入 {new Date(p.lastBuyDate + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
-                  </div>
-                </div>
+          <FundPositionCard
+            key={i}
+            p={p}
+            pct={pct}
+            barColor={barColor}
+            barColorDim={barColorDim}
+            byMonth={byMonth}
+            maxVal={maxVal}
+            months36={monthsAll}
+            soldCost={p.soldCost}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, months36, soldCost }: any) {
+  const [expanded, setExpanded] = useState(false)
+  const [activeMonth, setActiveMonth] = useState<string | null>(null)
+
+  return (
+    <div style={{ padding: '14px 0', borderBottom: '0.5px solid var(--bd)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0, flex: 1, marginRight: 12, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: barColor, flexShrink: 0, marginTop: 3 }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '未命名'}</div>
+            {p.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{p.code}</div>}
+            <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>
+              {p.earliestBuyDate && <>最早 {new Date(p.earliestBuyDate + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })} · </>}
+              最近 {new Date(p.lastBuyDate + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+            </div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--tx)' }}>{fmt(p.remaining)}</div>
+          <div style={{ fontSize: 12, color: '#FF9966' }}>{pct.toFixed(1)}%</div>
+          {soldCost > 0 && <div style={{ fontSize: 11, color: 'var(--t2)' }}>已卖出 {fmt(soldCost)}</div>}
+        </div>
+      </div>
+
+      {/* 展开按钮 */}
+      <button onClick={() => { setExpanded(e => !e); setActiveMonth(null) }} style={{
+        marginTop: 8, fontSize: 11, color: 'var(--t2)', background: 'none', border: 'none',
+        cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit'
+      }}>
+        <span>{expanded ? '▼' : '▶'}</span> 月度买入分布
+      </button>
+
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          {/* 点击信息框 */}
+          <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 36 }}>
+            <span style={{ fontSize: 12, color: 'var(--t2)' }}>{activeMonth ? activeMonth.replace('-', '年') + '月' : '点击柱子查看金额'}</span>
+            <span style={{ fontSize: 15, fontWeight: 500, color: activeMonth ? barColor : 'var(--t2)' }}>
+              {activeMonth ? fmt(byMonth[activeMonth] || 0) : '—'}
+            </span>
+          </div>
+          {/* 柱状图 */}
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <div style={{ width: months36.length * 13 + 'px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 52 }}>
+                {months36.map((m: any) => {
+                  const val = byMonth[m.key] || 0
+                  const h = val > 0 ? Math.max(3, Math.round(val / maxVal * 48)) : 2
+                  const isActive = activeMonth === m.key
+                  return (
+                    <div key={m.key}
+                      onClick={() => val > 0 && setActiveMonth(activeMonth === m.key ? null : m.key)}
+                      style={{
+                        width: 10, height: h,
+                        background: val > 0 ? (activeMonth && !isActive ? barColorDim : barColor) : 'var(--bd)',
+                        borderRadius: '2px 2px 0 0', flexShrink: 0,
+                        cursor: val > 0 ? 'pointer' : 'default',
+                        transition: 'background 0.15s'
+                      }}
+                    />
+                  )
+                })}
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--tx)' }}>{fmt(p.remaining)}</div>
-                <div style={{ fontSize: 12, color: '#FF9966' }}>{pct.toFixed(1)}%</div>
-                {p.soldCost > 0 && (
-                  <div style={{ fontSize: 11, color: 'var(--t2)' }}>已卖出 {fmt(p.soldCost)}</div>
-                )}
+              <div style={{ display: 'flex', gap: 3, marginTop: 3 }}>
+                {months36.map((m: any) => (
+                  <div key={m.key} style={{ width: 10, flexShrink: 0, fontSize: 9, color: m.month === 1 ? 'var(--tx)' : 'var(--t2)', textAlign: 'center', fontWeight: m.month === 1 ? 500 : 400 }}>
+                    {m.month === 1 ? m.year : m.month === 7 ? '7' : ''}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-        )
-      })}
+        </div>
+      )}
     </div>
   )
 }
