@@ -451,7 +451,7 @@ function EditModal({ record, onClose, onSaved }: {
           color: canSave && !saving ? '#fff' : 'var(--t2)',
           border: canSave && !saving ? 'none' : '1px solid var(--bd)',
           fontSize: 16, fontWeight: 600, cursor: canSave && !saving ? 'pointer' : 'default', fontFamily: 'inherit'
-        }}>{saving ? (isDca ? '生成中...' : '保存中...') : (isDca ? '生成定投记录' : '保存')}</button>
+        }}>{saving ? '保存中...' : '保存'}</button>
       </div>
     </div>
   )
