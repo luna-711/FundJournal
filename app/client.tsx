@@ -159,6 +159,53 @@ function LoginScreen({ onLogin }: { onLogin: (u: string) => void }) {
   )
 }
 
+// ── DCA helpers ───────────────────────────────────────────
+async function isTradeDay(dateStr: string): Promise<boolean> {
+  const d = new Date(dateStr + 'T00:00:00')
+  const dow = d.getDay()
+  if (dow === 0 || dow === 6) return false
+  try {
+    const res = await fetch(`https://timor.tech/api/holiday/info/${dateStr}`)
+    const json = await res.json()
+    if (json?.type?.type === 3) return true  // 调休工作日
+    if (json?.type?.type !== undefined && json.type.type !== 0) return false // 节假日
+  } catch {}
+  return true
+}
+
+async function generateDcaDates(startDate: string, frequency: string, endDate: string): Promise<string[]> {
+  const dates: string[] = []
+  const start = new Date(startDate + 'T00:00:00')
+  const end = new Date(endDate + 'T00:00:00')
+  const cur = new Date(start)
+
+  while (cur <= end) {
+    const dateStr = cur.toISOString().slice(0, 10)
+    const dow = cur.getDay()
+
+    if (frequency === 'workday') {
+      if (await isTradeDay(dateStr)) dates.push(dateStr)
+      cur.setDate(cur.getDate() + 1)
+    } else if (frequency === 'weekly') {
+      if (dow !== 0 && dow !== 6) {
+        if (await isTradeDay(dateStr)) dates.push(dateStr)
+      }
+      cur.setDate(cur.getDate() + 7)
+    } else if (frequency === 'biweekly') {
+      if (dow !== 0 && dow !== 6) {
+        if (await isTradeDay(dateStr)) dates.push(dateStr)
+      }
+      cur.setDate(cur.getDate() + 14)
+    } else if (frequency === 'monthly') {
+      if (dow !== 0 && dow !== 6) {
+        if (await isTradeDay(dateStr)) dates.push(dateStr)
+      }
+      cur.setMonth(cur.getMonth() + 1)
+    }
+  }
+  return dates
+}
+
 // ── Add Modal ─────────────────────────────────────────────
 function AddModal({ date, username, onClose, onSaved }: {
   date: string, username: string, onClose: () => void, onSaved: () => void
@@ -171,6 +218,9 @@ function AddModal({ date, username, onClose, onSaved }: {
   const [cost, setCost] = useState('')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
+  const [isDca, setIsDca] = useState(false)
+  const [dcaFreq, setDcaFreq] = useState('workday')
+  const [dcaStart, setDcaStart] = useState('')
 
   const lookup = async (c: string) => {
     if (!c || c.length < 4) return
@@ -184,19 +234,50 @@ function AddModal({ date, username, onClose, onSaved }: {
   }
 
   const canSave = type === 'buy'
-    ? (!!amount && !isNaN(Number(amount)))
+    ? (!!amount && !isNaN(Number(amount)) && (!isDca || !!dcaStart))
     : (!!pnl && !isNaN(Number(pnl)))
 
   const save = async () => {
     if (!canSave) return
     setSaving(true)
-    await getDB().from('fund_records').insert({
-      username, record_date: date, type,
-      fund_name: name.trim(), fund_code: code.trim(),
-      amount: type === 'buy' ? Number(amount) : 0,
-      pnl: type === 'sell' ? Number(pnl) : 0,
-      cost: type === 'sell' ? Number(cost) : 0,
-    })
+
+    if (type === 'buy' && isDca && dcaStart) {
+      // 生成定投记录
+      const today = new Date().toISOString().slice(0, 10)
+      const dates = await generateDcaDates(dcaStart, dcaFreq, today)
+      if (dates.length > 0) {
+        const rows = dates.map(d => ({
+          username, record_date: d, type: 'buy' as RecordType,
+          fund_name: name.trim(), fund_code: code.trim(),
+          amount: Number(amount), pnl: 0, cost: 0,
+        }))
+        // 先查已有记录，避免重复
+        const { data: existing } = await getDB().from('fund_records')
+          .select('record_date')
+          .eq('username', username)
+          .eq('fund_code', code.trim())
+          .eq('type', 'buy')
+        const existingDates = new Set((existing || []).map((r: any) => r.record_date))
+        const newRows = rows.filter(r => !existingDates.has(r.record_date))
+        if (newRows.length > 0) {
+          await getDB().from('fund_records').insert(newRows)
+        }
+        // 保存定投计划
+        await getDB().from('fund_plans').insert({
+          username, fund_code: code.trim(), fund_name: name.trim(),
+          amount: Number(amount), frequency: dcaFreq,
+          start_date: dcaStart, last_synced_date: today, active: true,
+        })
+      }
+    } else {
+      await getDB().from('fund_records').insert({
+        username, record_date: date, type,
+        fund_name: name.trim(), fund_code: code.trim(),
+        amount: type === 'buy' ? Number(amount) : 0,
+        pnl: type === 'sell' ? Number(pnl) : 0,
+        cost: type === 'sell' ? Number(cost) : 0,
+      })
+    }
     setSaving(false)
     onSaved()
   }
@@ -234,11 +315,45 @@ function AddModal({ date, username, onClose, onSaved }: {
           <input style={inputStyle} placeholder="自动填入，也可手动输入" value={name} onChange={e => setName(e.target.value)} />
         </div>
         {type === 'buy' && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入金额（元）</div>
-            <input style={inputStyle} type="number" placeholder="0"
-              value={amount} onChange={e => setAmount(e.target.value)} />
-          </div>
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入金额（元）</div>
+              <input style={inputStyle} type="number" placeholder="0"
+                value={amount} onChange={e => setAmount(e.target.value)} />
+            </div>
+            {/* 定投开关 */}
+            <div onClick={() => setIsDca(v => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--bg)', borderRadius: 10, marginBottom: 12, cursor: 'pointer' }}>
+              <div>
+                <div style={{ fontSize: 14, color: 'var(--tx)', fontWeight: 500 }}>设为定投</div>
+                <div style={{ fontSize: 12, color: 'var(--t2)', marginTop: 2 }}>自动生成历史买入记录</div>
+              </div>
+              <div style={{ width: 44, height: 26, borderRadius: 13, background: isDca ? '#333' : 'var(--bd)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: 3, left: isDca ? 21 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+              </div>
+            </div>
+            {isDca && (
+              <div style={{ marginBottom: 16, padding: 14, background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--bd)' }}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 6 }}>定投频率</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[['workday','工作日'],['weekly','每周'],['biweekly','每两周'],['monthly','每月']].map(([val, label]) => (
+                      <button key={val} onClick={() => setDcaFreq(val)} style={{
+                        fontSize: 12, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit',
+                        border: '1px solid ' + (dcaFreq === val ? 'var(--tx)' : 'var(--bd)'),
+                        background: dcaFreq === val ? 'var(--tx)' : 'transparent',
+                        color: dcaFreq === val ? 'var(--card)' : 'var(--t2)',
+                      }}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>定投开始日期</div>
+                  <input type="date" style={{ ...inputStyle, fontSize: 14 }} value={dcaStart} onChange={e => setDcaStart(e.target.value)} />
+                </div>
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--t2)' }}>将自动生成从开始日期到今天的所有买入记录，跳过节假日和周末</div>
+              </div>
+            )}
+          </>
         )}
         {type === 'sell' && (
           <>
@@ -260,7 +375,7 @@ function AddModal({ date, username, onClose, onSaved }: {
           color: canSave && !saving ? '#fff' : 'var(--t2)',
           border: canSave && !saving ? 'none' : '1px solid var(--bd)',
           fontSize: 16, fontWeight: 600, cursor: canSave && !saving ? 'pointer' : 'default', fontFamily: 'inherit'
-        }}>{saving ? '保存中...' : '保存'}</button>
+        }}>{saving ? (isDca ? '生成中...' : '保存中...') : (isDca ? '生成定投记录' : '保存')}</button>
       </div>
     </div>
   )
@@ -336,7 +451,7 @@ function EditModal({ record, onClose, onSaved }: {
           color: canSave && !saving ? '#fff' : 'var(--t2)',
           border: canSave && !saving ? 'none' : '1px solid var(--bd)',
           fontSize: 16, fontWeight: 600, cursor: canSave && !saving ? 'pointer' : 'default', fontFamily: 'inherit'
-        }}>{saving ? '保存中...' : '保存'}</button>
+        }}>{saving ? (isDca ? '生成中...' : '保存中...') : (isDca ? '生成定投记录' : '保存')}</button>
       </div>
     </div>
   )
