@@ -435,8 +435,8 @@ function AddModal({ date, username, onClose, onSaved }: {
 }
 
 // ── Edit Modal ────────────────────────────────────────────
-function EditModal({ record, onClose, onSaved }: {
-  record: FundRecord, onClose: () => void, onSaved: () => void
+function EditModal({ record, username, onClose, onSaved }: {
+  record: FundRecord, username: string, onClose: () => void, onSaved: () => void
 }) {
   const [name, setName] = useState(record.fund_name)
   const [code, setCode] = useState(record.fund_code)
@@ -444,6 +444,46 @@ function EditModal({ record, onClose, onSaved }: {
   const [cost, setCost] = useState(record.type === 'sell' ? String(record.cost || 0) : '')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
+  const [plan, setPlan] = useState<any>(null)
+  const [planAmount, setPlanAmount] = useState('')
+  const [planFreq, setPlanFreq] = useState('workday')
+  const [planSaving, setPlanSaving] = useState(false)
+
+  useEffect(() => {
+    if (record.type !== 'buy' || !record.fund_code) return
+    getDB().from('fund_plans')
+      .select('*')
+      .eq('username', username)
+      .eq('fund_code', record.fund_code)
+      .eq('active', true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setPlan(data)
+          setPlanAmount(String(data.amount))
+          setPlanFreq(data.frequency)
+        }
+      })
+  }, [record.fund_code, record.type, username])
+
+  const savePlan = async () => {
+    if (!plan) return
+    setPlanSaving(true)
+    await getDB().from('fund_plans').update({
+      amount: Number(planAmount),
+      frequency: planFreq,
+    }).eq('id', plan.id)
+    setPlan({ ...plan, amount: Number(planAmount), frequency: planFreq })
+    setPlanSaving(false)
+  }
+
+  const stopPlan = async () => {
+    if (!plan) return
+    setPlanSaving(true)
+    await getDB().from('fund_plans').update({ active: false }).eq('id', plan.id)
+    setPlan(null)
+    setPlanSaving(false)
+  }
 
   const lookup = async (c: string) => {
     if (!c || c.length < 4) return
@@ -505,6 +545,39 @@ function EditModal({ record, onClose, onSaved }: {
           border: canSave && !saving ? 'none' : '1px solid var(--bd)',
           fontSize: 16, fontWeight: 600, cursor: canSave && !saving ? 'pointer' : 'default', fontFamily: 'inherit'
         }}>{saving ? '保存中...' : '保存'}</button>
+
+        {plan && (
+          <div style={{ marginTop: 16, padding: 14, background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--bd)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)', marginBottom: 12 }}>定投计划</div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>定投金额（元）</div>
+              <input style={inputStyle} type="number" value={planAmount} onChange={e => setPlanAmount(e.target.value)} />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 6 }}>定投频率</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[['workday','工作日'],['weekly','每周'],['biweekly','每两周'],['monthly','每月']].map(([val, label]) => (
+                  <button key={val} onClick={() => setPlanFreq(val)} style={{
+                    fontSize: 12, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit',
+                    border: '1px solid ' + (planFreq === val ? 'var(--tx)' : 'var(--bd)'),
+                    background: planFreq === val ? 'var(--tx)' : 'transparent',
+                    color: planFreq === val ? 'var(--card)' : 'var(--t2)',
+                  }}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={savePlan} disabled={planSaving || !planAmount} style={{
+                flex: 1, padding: '10px 0', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                background: '#333', color: '#fff', border: 'none'
+              }}>保存计划</button>
+              <button onClick={stopPlan} disabled={planSaving} style={{
+                padding: '10px 16px', borderRadius: 10, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
+                background: 'transparent', color: '#E24B4A', border: '1px solid #FFCCCC'
+              }}>停止定投</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -567,7 +640,7 @@ function DayPanel({ date, records, username, onClose, onRefresh }: {
         <button onClick={() => setShowAdd(true)} style={{ width: '100%', marginTop: 16, padding: '12px 0', borderRadius: 12, border: '1px dashed var(--bd)', background: 'transparent', color: 'var(--t2)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>+ 添加记录</button>
       </div>
       {showAdd && <AddModal date={date} username={username} onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); onRefresh() }} />}
-      {editRecord && <EditModal record={editRecord} onClose={() => setEditRecord(null)} onSaved={() => { setEditRecord(null); onRefresh() }} />}
+      {editRecord && <EditModal record={editRecord} username={username} onClose={() => setEditRecord(null)} onSaved={() => { setEditRecord(null); onRefresh() }} />}
     </div>
   )
 }
