@@ -173,6 +173,7 @@ async function isTradeDay(dateStr: string): Promise<boolean> {
   return true
 }
 
+// 从 startDate（不含）到 endDate（含）生成符合频率的交易日列表
 async function generateDcaDates(startDate: string, frequency: string, endDate: string): Promise<string[]> {
   const dates: string[] = []
   const start = new Date(startDate + 'T00:00:00')
@@ -204,6 +205,61 @@ async function generateDcaDates(startDate: string, frequency: string, endDate: s
     }
   }
   return dates
+}
+
+// 每次 app 启动时，把所有激活的定投计划从 last_synced_date 同步到今天
+async function syncDcaPlans(username: string): Promise<void> {
+  const db = getDB()
+  const today = new Date().toISOString().slice(0, 10)
+
+  const { data: plans } = await db.from('fund_plans')
+    .select('*')
+    .eq('username', username)
+    .eq('active', true)
+
+  if (!plans || plans.length === 0) return
+
+  for (const plan of plans) {
+    const lastSynced: string = plan.last_synced_date || plan.start_date
+    // 如果已经同步到今天，跳过
+    if (lastSynced >= today) continue
+
+    // 生成 lastSynced（不含）到 today（含）的日期列表
+    const newDates = await generateDcaDates(lastSynced, plan.frequency, today)
+    if (newDates.length === 0) {
+      // 即使没有新交易日，也要更新 last_synced_date 到今天，避免重复检查
+      await db.from('fund_plans').update({ last_synced_date: today }).eq('id', plan.id)
+      continue
+    }
+
+    // 去重：查出该基金已有的买入日期
+    const { data: existing } = await db.from('fund_records')
+      .select('record_date')
+      .eq('username', username)
+      .eq('fund_code', plan.fund_code)
+      .eq('type', 'buy')
+    const existingDates = new Set((existing || []).map((r: any) => r.record_date))
+
+    const newRows = newDates
+      .filter(d => !existingDates.has(d))
+      .map(d => ({
+        username,
+        record_date: d,
+        type: 'buy' as RecordType,
+        fund_name: plan.fund_name,
+        fund_code: plan.fund_code,
+        amount: plan.amount,
+        pnl: 0,
+        cost: 0,
+      }))
+
+    if (newRows.length > 0) {
+      await db.from('fund_records').insert(newRows)
+    }
+
+    // 更新 last_synced_date 到今天
+    await db.from('fund_plans').update({ last_synced_date: today }).eq('id', plan.id)
+  }
 }
 
 // ── Add Modal ─────────────────────────────────────────────
@@ -242,33 +298,30 @@ function AddModal({ date, username, onClose, onSaved }: {
     setSaving(true)
 
     if (type === 'buy' && isDca && dcaStart) {
-      // 生成定投记录
       const today = new Date().toISOString().slice(0, 10)
-      const dates = await generateDcaDates(dcaStart, dcaFreq, today)
-      if (dates.length > 0) {
-        const rows = dates.map(d => ({
-          username, record_date: d, type: 'buy' as RecordType,
-          fund_name: name.trim(), fund_code: code.trim(),
-          amount: Number(amount), pnl: 0, cost: 0,
-        }))
-        // 先查已有记录，避免重复
+      // 只插入当天这一笔（如果是交易日），后续由 syncDcaPlans 负责往后续上
+      const isTodayTrade = await isTradeDay(date)
+      if (isTodayTrade) {
         const { data: existing } = await getDB().from('fund_records')
-          .select('record_date')
+          .select('id')
           .eq('username', username)
           .eq('fund_code', code.trim())
+          .eq('record_date', date)
           .eq('type', 'buy')
-        const existingDates = new Set((existing || []).map((r: any) => r.record_date))
-        const newRows = rows.filter(r => !existingDates.has(r.record_date))
-        if (newRows.length > 0) {
-          await getDB().from('fund_records').insert(newRows)
+        if (!existing || existing.length === 0) {
+          await getDB().from('fund_records').insert({
+            username, record_date: date, type: 'buy' as RecordType,
+            fund_name: name.trim(), fund_code: code.trim(),
+            amount: Number(amount), pnl: 0, cost: 0,
+          })
         }
-        // 保存定投计划
-        await getDB().from('fund_plans').insert({
-          username, fund_code: code.trim(), fund_name: name.trim(),
-          amount: Number(amount), frequency: dcaFreq,
-          start_date: dcaStart, last_synced_date: today, active: true,
-        })
       }
+      // 保存定投计划，last_synced_date 设为今天，下次打开 app 时从今天往后续
+      await getDB().from('fund_plans').insert({
+        username, fund_code: code.trim(), fund_name: name.trim(),
+        amount: Number(amount), frequency: dcaFreq,
+        start_date: dcaStart, last_synced_date: today, active: true,
+      })
     } else {
       await getDB().from('fund_records').insert({
         username, record_date: date, type,
@@ -325,7 +378,7 @@ function AddModal({ date, username, onClose, onSaved }: {
             <div onClick={() => setIsDca(v => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--bg)', borderRadius: 10, marginBottom: 12, cursor: 'pointer' }}>
               <div>
                 <div style={{ fontSize: 14, color: 'var(--tx)', fontWeight: 500 }}>设为定投</div>
-                <div style={{ fontSize: 12, color: 'var(--t2)', marginTop: 2 }}>自动生成历史买入记录</div>
+                <div style={{ fontSize: 12, color: 'var(--t2)', marginTop: 2 }}>每次打开 app 自动同步到今天</div>
               </div>
               <div style={{ width: 44, height: 26, borderRadius: 13, background: isDca ? '#333' : 'var(--bd)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
                 <div style={{ position: 'absolute', top: 3, left: isDca ? 21 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
@@ -350,7 +403,7 @@ function AddModal({ date, username, onClose, onSaved }: {
                   <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>定投开始日期</div>
                   <input type="date" style={{ ...inputStyle, fontSize: 14 }} value={dcaStart} onChange={e => setDcaStart(e.target.value)} />
                 </div>
-                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--t2)' }}>将自动生成从开始日期到今天的所有买入记录，跳过节假日和周末</div>
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--t2)' }}>从今天开始，每次打开 app 时自动补充到最新，跳过节假日和周末</div>
               </div>
             )}
           </>
@@ -999,6 +1052,8 @@ export default function App() {
 
   const load = useCallback(async (u: string) => {
     setLoading(true)
+    // 先同步定投计划（往后自动生成），再读取记录
+    await syncDcaPlans(u).catch(() => {}) // 同步失败不阻塞主流程
     const { data } = await getDB().from('fund_records').select('*').eq('username', u).order('record_date', { ascending: false })
     setRecords(data || [])
     setLoading(false)
