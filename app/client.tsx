@@ -22,6 +22,7 @@ interface FundRecord {
   cost: number
   index_val: number | null
   sell_index_val: number | null
+  sell_to_date: string | null
   created_at: string
 }
 
@@ -276,6 +277,7 @@ function AddModal({ date, username, onClose, onSaved }: {
   const [cost, setCost] = useState('')
   const [indexVal, setIndexVal] = useState('')
   const [sellIndexVal, setSellIndexVal] = useState('')
+  const [sellToDate, setSellToDate] = useState('')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
   const [isDca, setIsDca] = useState(false)
@@ -336,6 +338,7 @@ function AddModal({ date, username, onClose, onSaved }: {
         cost: type === 'sell' ? Number(cost) : 0,
         index_val: indexVal ? Number(indexVal) : null,
         sell_index_val: type === 'sell' && sellIndexVal ? Number(sellIndexVal) : null,
+        sell_to_date: type === 'sell' && sellToDate ? sellToDate : null,
       })
     }
     setSaving(false)
@@ -427,6 +430,12 @@ function AddModal({ date, username, onClose, onSaved }: {
               <input style={inputStyle} type="number" placeholder="不填则视为全部卖出"
                 value={cost} onChange={e => setCost(e.target.value)} />
             </div>
+            {cost && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入截止日 <span style={{ color: '#bbb', fontWeight: 400 }}>（部分卖出对应的最后买入日）</span></div>
+                <input type="date" style={{ ...inputStyle, fontSize: 14 }} value={sellToDate} onChange={e => setSellToDate(e.target.value)} />
+              </div>
+            )}
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>盈亏金额（元）</div>
               <input style={inputStyle} type="number" placeholder="亏损填负数"
@@ -468,6 +477,7 @@ function EditModal({ record, username, onClose, onSaved }: {
   const [cost, setCost] = useState(record.type === 'sell' ? String(record.cost || 0) : '')
   const [indexVal, setIndexVal] = useState(record.index_val != null ? String(record.index_val) : '')
   const [sellIndexVal, setSellIndexVal] = useState(record.sell_index_val != null ? String(record.sell_index_val) : '')
+  const [sellToDate, setSellToDate] = useState(record.sell_to_date || '')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
   const [plan, setPlan] = useState<any>(null)
@@ -534,6 +544,7 @@ function EditModal({ record, username, onClose, onSaved }: {
       cost: record.type === 'sell' ? Number(cost) : 0,
       index_val: indexVal ? Number(indexVal) : null,
       sell_index_val: record.type === 'sell' && sellIndexVal ? Number(sellIndexVal) : null,
+      sell_to_date: record.type === 'sell' && sellToDate ? sellToDate : null,
     }).eq('id', record.id)
     setSaving(false)
     onSaved()
@@ -557,10 +568,18 @@ function EditModal({ record, username, onClose, onSaved }: {
           <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} />
         </div>
         {record.type === 'sell' && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>本次本金（元）<span style={{ color: '#bbb', fontWeight: 400 }}>（部分卖出时填）</span></div>
-            <input style={inputStyle} type="number" placeholder="不填则视为全部卖出" value={cost} onChange={e => setCost(e.target.value)} />
-          </div>
+          <>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>本次本金（元）<span style={{ color: '#bbb', fontWeight: 400 }}>（部分卖出时填）</span></div>
+              <input style={inputStyle} type="number" placeholder="不填则视为全部卖出" value={cost} onChange={e => setCost(e.target.value)} />
+            </div>
+            {cost && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入截止日 <span style={{ color: '#bbb', fontWeight: 400 }}>（部分卖出对应的最后买入日）</span></div>
+                <input type="date" style={{ ...inputStyle, fontSize: 14 }} value={sellToDate} onChange={e => setSellToDate(e.target.value)} />
+              </div>
+            )}
+          </>
         )}
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>{record.type === 'buy' ? '买入金额（元）' : '盈亏金额（元）'}</div>
@@ -1081,7 +1100,21 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
             maxVal={maxVal}
             months36={monthsAll}
             soldCost={p.soldCost}
-            buys={allBuys.filter(r => (r.fund_code || r.fund_name || '未知') === p.key && r.record_date > (allSells.filter(s => (s.fund_code || s.fund_name || '未知') === p.key && (!s.cost || s.cost === 0)).sort((a,b) => a.record_date.localeCompare(b.record_date)).slice(-1)[0]?.record_date || '0000-00-00'))}
+            buys={(() => {
+              const fundKey = p.key
+              const lastFullSellDate = allSells.filter(s => (s.fund_code || s.fund_name || '未知') === fundKey && (!s.cost || s.cost === 0)).sort((a,b) => a.record_date.localeCompare(b.record_date)).slice(-1)[0]?.record_date || '0000-00-00'
+              const partialSells = allSells.filter(s => (s.fund_code || s.fund_name || '未知') === fundKey && s.cost && s.cost > 0 && s.sell_to_date && s.record_date > lastFullSellDate)
+              const excludedDates = new Set(partialSells.map(s => s.sell_to_date!))
+              // build excluded range: buys up to each sell_to_date are "used up"
+              // simplest: exclude buys with record_date <= any sell_to_date
+              const maxPartialDate = partialSells.length > 0 ? partialSells.map(s => s.sell_to_date!).sort().slice(-1)[0] : null
+              return allBuys.filter(r => {
+                if ((r.fund_code || r.fund_name || '未知') !== fundKey) return false
+                if (r.record_date <= lastFullSellDate) return false
+                if (maxPartialDate && r.record_date <= maxPartialDate) return false
+                return true
+              })
+            })()}
             sells={allSells.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)}
           />
         )
