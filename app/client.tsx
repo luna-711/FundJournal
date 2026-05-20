@@ -713,13 +713,16 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
   const filteredBuys = filtered.filter(r => r.type === 'buy')
   const totalPnl = sells.reduce((s, r) => s + r.pnl, 0)
 
-  const byFund: Record<string, { name: string, code: string, invest: number, pnl: number, earliestBuy: Date | null, latestSell: Date | null }> = {}
+  const byFund: Record<string, { name: string, code: string, invest: number, pnl: number, earliestBuy: Date | null, latestSell: Date | null, sellIndexes: { date: string, prevAvg: number | null, sellIdx: number | null }[] }> = {}
   sells.forEach(r => {
     const key = r.fund_code || r.fund_name || '未知'
-    if (!byFund[key]) byFund[key] = { name: r.fund_name, code: r.fund_code, invest: 0, pnl: 0, earliestBuy: null, latestSell: null }
+    if (!byFund[key]) byFund[key] = { name: r.fund_name, code: r.fund_code, invest: 0, pnl: 0, earliestBuy: null, latestSell: null, sellIndexes: [] }
     byFund[key].pnl += r.pnl
     const sd = new Date(r.record_date)
     if (!byFund[key].latestSell || sd > byFund[key].latestSell!) byFund[key].latestSell = sd
+    if (r.index_val != null || r.sell_index_val != null) {
+      byFund[key].sellIndexes.push({ date: r.record_date, prevAvg: r.index_val, sellIdx: r.sell_index_val })
+    }
   })
   // 本金计算逻辑：
   // 有填cost → 部分卖出，用cost
@@ -830,20 +833,34 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
           {Object.values(byFund).sort((a, b) => b.pnl - a.pnl).map((f, i) => {
             const simpleReturn = f.invest > 0 ? f.pnl / f.invest * 100 : null
             return (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{f.name || '未命名'}</div>
-                  {f.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{f.code}</div>}
-                  {f.earliestBuy && <div style={{ fontSize: 11, color: 'var(--t2)' }}>
-                    {f.earliestBuy.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
-                    {f.latestSell ? ' → ' + f.latestSell.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
-                  </div>}
+              <div key={i} style={{ padding: '10px 0', borderBottom: '0.5px solid var(--bd)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx)' }}>{f.name || '未命名'}</div>
+                    {f.code && <div style={{ fontSize: 12, color: 'var(--t2)' }}>{f.code}</div>}
+                    {f.earliestBuy && <div style={{ fontSize: 11, color: 'var(--t2)' }}>
+                      {f.earliestBuy.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                      {f.latestSell ? ' → ' + f.latestSell.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
+                    </div>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 14, color: pnlColor(f.pnl), fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
+                    {simpleReturn !== null && <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>{fmtPct(simpleReturn)}</div>}
+                    {f.invest > 0 && <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>}
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 14, color: pnlColor(f.pnl), fontWeight: 500 }}>{f.pnl >= 0 ? '+' : ''}{fmt(f.pnl)}</div>
-                  {simpleReturn !== null && <div style={{ fontSize: 12, color: pnlColor(f.pnl) }}>{fmtPct(simpleReturn)}</div>}
-                  {f.invest > 0 && <div style={{ fontSize: 11, color: 'var(--t2)' }}>本金 {fmt(f.invest)}</div>}
-                </div>
+                {f.sellIndexes.length > 0 && (
+                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {f.sellIndexes.map((si, j) => (
+                      <div key={j} style={{ fontSize: 11, color: 'var(--t2)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span>{new Date(si.date + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}</span>
+                        {si.prevAvg != null && <span>均价 <span style={{ color: 'var(--tx)', fontWeight: 500 }}>{si.prevAvg.toFixed(2)}</span></span>}
+                        {si.prevAvg != null && si.sellIdx != null && <span>→</span>}
+                        {si.sellIdx != null && <span>卖出 <span style={{ color: si.sellIdx > (si.prevAvg || si.sellIdx) ? '#E24B4A' : si.sellIdx < (si.prevAvg || si.sellIdx) ? '#1D9E75' : 'var(--tx)', fontWeight: 500 }}>{si.sellIdx.toFixed(2)}</span></span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -1104,21 +1121,11 @@ function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, mont
         const totalAmt = validBuys.reduce((s: number, b: FundRecord) => s + b.amount, 0)
         const avgIdx = totalAmt > 0 ? validBuys.reduce((s: number, b: FundRecord) => s + b.index_val! * b.amount, 0) / totalAmt : null
         if (!avgIdx) return null
-        const sellsWithIdx = (sells || []).filter((s: FundRecord) => s.sell_index_val != null)
         return (
-          <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '7px 10px', marginTop: 8, fontSize: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: 'var(--t2)' }}>买入均价指数</span>
-              <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{avgIdx.toFixed(2)}</span>
-              <span style={{ color: 'var(--t2)', fontSize: 11 }}>({validBuys.length}/{buys.length} 笔有指数)</span>
-            </div>
-            {sellsWithIdx.map((s: FundRecord) => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <span style={{ color: 'var(--t2)' }}>卖出指数</span>
-                <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{s.sell_index_val!.toFixed(2)}</span>
-                <span style={{ color: 'var(--t2)', fontSize: 11 }}>{new Date(s.record_date + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}</span>
-              </div>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', borderRadius: 8, padding: '7px 10px', marginTop: 8, fontSize: 12 }}>
+            <span style={{ color: 'var(--t2)' }}>均价指数</span>
+            <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{avgIdx.toFixed(2)}</span>
+            <span style={{ color: 'var(--t2)', fontSize: 11 }}>({validBuys.length}/{buys.length} 笔有指数)</span>
           </div>
         )
       })()}
