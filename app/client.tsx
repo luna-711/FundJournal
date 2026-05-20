@@ -21,6 +21,7 @@ interface FundRecord {
   pnl: number
   cost: number
   index_val: number | null
+  sell_index_val: number | null
   created_at: string
 }
 
@@ -274,6 +275,7 @@ function AddModal({ date, username, onClose, onSaved }: {
   const [pnl, setPnl] = useState('')
   const [cost, setCost] = useState('')
   const [indexVal, setIndexVal] = useState('')
+  const [sellIndexVal, setSellIndexVal] = useState('')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
   const [isDca, setIsDca] = useState(false)
@@ -333,6 +335,7 @@ function AddModal({ date, username, onClose, onSaved }: {
         pnl: type === 'sell' ? Number(pnl) : 0,
         cost: type === 'sell' ? Number(cost) : 0,
         index_val: type === 'buy' && indexVal ? Number(indexVal) : null,
+        sell_index_val: type === 'sell' && sellIndexVal ? Number(sellIndexVal) : null,
       })
     }
     setSaving(false)
@@ -424,10 +427,15 @@ function AddModal({ date, username, onClose, onSaved }: {
               <input style={inputStyle} type="number" placeholder="不填则视为全部卖出"
                 value={cost} onChange={e => setCost(e.target.value)} />
             </div>
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>盈亏金额（元）</div>
               <input style={inputStyle} type="number" placeholder="亏损填负数"
                 value={pnl} onChange={e => setPnl(e.target.value)} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖出时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
+              <input style={inputStyle} type="number" placeholder="如 3288"
+                value={sellIndexVal} onChange={e => setSellIndexVal(e.target.value)} />
             </div>
           </>
         )}
@@ -452,6 +460,7 @@ function EditModal({ record, username, onClose, onSaved }: {
   const [amount, setAmount] = useState(record.type === 'buy' ? String(record.amount) : String(record.pnl))
   const [cost, setCost] = useState(record.type === 'sell' ? String(record.cost || 0) : '')
   const [indexVal, setIndexVal] = useState(record.index_val != null ? String(record.index_val) : '')
+  const [sellIndexVal, setSellIndexVal] = useState(record.sell_index_val != null ? String(record.sell_index_val) : '')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
   const [plan, setPlan] = useState<any>(null)
@@ -517,6 +526,7 @@ function EditModal({ record, username, onClose, onSaved }: {
       pnl: record.type === 'sell' ? Number(amount) : 0,
       cost: record.type === 'sell' ? Number(cost) : 0,
       index_val: record.type === 'buy' && indexVal ? Number(indexVal) : null,
+      sell_index_val: record.type === 'sell' && sellIndexVal ? Number(sellIndexVal) : null,
     }).eq('id', record.id)
     setSaving(false)
     onSaved()
@@ -545,10 +555,17 @@ function EditModal({ record, username, onClose, onSaved }: {
             <input style={inputStyle} type="number" placeholder="不填则视为全部卖出" value={cost} onChange={e => setCost(e.target.value)} />
           </div>
         )}
-        <div style={{ marginBottom: record.type === 'buy' ? 10 : 20 }}>
+        <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>{record.type === 'buy' ? '买入金额（元）' : '盈亏金额（元）'}</div>
           <input style={inputStyle} type="number" value={amount} onChange={e => setAmount(e.target.value)} />
         </div>
+        {record.type === 'sell' && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖出时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
+            <input style={inputStyle} type="number" placeholder="如 3288"
+              value={sellIndexVal} onChange={e => setSellIndexVal(e.target.value)} />
+          </div>
+        )}
         {record.type === 'buy' && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填，用于计算均价）</span></div>
@@ -1033,7 +1050,8 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
             maxVal={maxVal}
             months36={monthsAll}
             soldCost={p.soldCost}
-            buys={allBuys.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)}
+            buys={allBuys.filter(r => (r.fund_code || r.fund_name || '未知') === p.key && r.record_date > (allSells.filter(s => (s.fund_code || s.fund_name || '未知') === p.key && (!s.cost || s.cost === 0)).sort((a,b) => a.record_date.localeCompare(b.record_date)).slice(-1)[0]?.record_date || '0000-00-00'))}
+            sells={allSells.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)}
           />
         )
       })}
@@ -1041,7 +1059,7 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
   )
 }
 
-function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, months36, soldCost, buys }: any) {
+function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, months36, soldCost, buys, sells }: any) {
   const [expanded, setExpanded] = useState(false)
   const [activeMonth, setActiveMonth] = useState<string | null>(null)
 
@@ -1072,11 +1090,21 @@ function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, mont
         const totalAmt = validBuys.reduce((s: number, b: FundRecord) => s + b.amount, 0)
         const avgIdx = totalAmt > 0 ? validBuys.reduce((s: number, b: FundRecord) => s + b.index_val! * b.amount, 0) / totalAmt : null
         if (!avgIdx) return null
+        const sellsWithIdx = (sells || []).filter((s: FundRecord) => s.sell_index_val != null)
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', borderRadius: 8, padding: '7px 10px', marginTop: 8, fontSize: 12 }}>
-            <span style={{ color: 'var(--t2)' }}>均价指数</span>
-            <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{avgIdx.toFixed(2)}</span>
-            <span style={{ color: 'var(--t2)', fontSize: 11 }}>({validBuys.length}/{buys.length} 笔有指数)</span>
+          <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '7px 10px', marginTop: 8, fontSize: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: 'var(--t2)' }}>买入均价指数</span>
+              <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{avgIdx.toFixed(2)}</span>
+              <span style={{ color: 'var(--t2)', fontSize: 11 }}>({validBuys.length}/{buys.length} 笔有指数)</span>
+            </div>
+            {sellsWithIdx.map((s: FundRecord) => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <span style={{ color: 'var(--t2)' }}>卖出指数</span>
+                <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{s.sell_index_val!.toFixed(2)}</span>
+                <span style={{ color: 'var(--t2)', fontSize: 11 }}>{new Date(s.record_date + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}</span>
+              </div>
+            ))}
           </div>
         )
       })()}
