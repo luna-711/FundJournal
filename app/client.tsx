@@ -334,7 +334,7 @@ function AddModal({ date, username, onClose, onSaved }: {
         amount: type === 'buy' ? Number(amount) : 0,
         pnl: type === 'sell' ? Number(pnl) : 0,
         cost: type === 'sell' ? Number(cost) : 0,
-        index_val: type === 'buy' && indexVal ? Number(indexVal) : null,
+        index_val: indexVal ? Number(indexVal) : null,
         sell_index_val: type === 'sell' && sellIndexVal ? Number(sellIndexVal) : null,
       })
     }
@@ -432,10 +432,17 @@ function AddModal({ date, username, onClose, onSaved }: {
               <input style={inputStyle} type="number" placeholder="亏损填负数"
                 value={pnl} onChange={e => setPnl(e.target.value)} />
             </div>
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖出时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
-              <input style={inputStyle} type="number" placeholder="如 3288"
-                value={sellIndexVal} onChange={e => setSellIndexVal(e.target.value)} />
+            <div style={{ marginBottom: 20, display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖前均价指数 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
+                <input style={inputStyle} type="number" placeholder="如 3100"
+                  value={indexVal} onChange={e => setIndexVal(e.target.value)} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖出时指数 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
+                <input style={inputStyle} type="number" placeholder="如 3288"
+                  value={sellIndexVal} onChange={e => setSellIndexVal(e.target.value)} />
+              </div>
             </div>
           </>
         )}
@@ -525,7 +532,7 @@ function EditModal({ record, username, onClose, onSaved }: {
       amount: record.type === 'buy' ? Number(amount) : 0,
       pnl: record.type === 'sell' ? Number(amount) : 0,
       cost: record.type === 'sell' ? Number(cost) : 0,
-      index_val: record.type === 'buy' && indexVal ? Number(indexVal) : null,
+      index_val: indexVal ? Number(indexVal) : null,
       sell_index_val: record.type === 'sell' && sellIndexVal ? Number(sellIndexVal) : null,
     }).eq('id', record.id)
     setSaving(false)
@@ -560,10 +567,17 @@ function EditModal({ record, username, onClose, onSaved }: {
           <input style={inputStyle} type="number" value={amount} onChange={e => setAmount(e.target.value)} />
         </div>
         {record.type === 'sell' && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖出时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
-            <input style={inputStyle} type="number" placeholder="如 3288"
-              value={sellIndexVal} onChange={e => setSellIndexVal(e.target.value)} />
+          <div style={{ marginBottom: 20, display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖前均价指数 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
+              <input style={inputStyle} type="number" placeholder="如 3100"
+                value={indexVal} onChange={e => setIndexVal(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖出时指数 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
+              <input style={inputStyle} type="number" placeholder="如 3288"
+                value={sellIndexVal} onChange={e => setSellIndexVal(e.target.value)} />
+            </div>
           </div>
         )}
         {record.type === 'buy' && (
