@@ -385,7 +385,7 @@ function AddModal({ date, username, onClose, onSaved }: {
                 value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填，用于计算指数均价）</span></div>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填，用于计算均价）</span></div>
               <input style={inputStyle} type="number" placeholder="如 2389"
                 value={indexVal} onChange={e => setIndexVal(e.target.value)} />
             </div>
@@ -443,7 +443,7 @@ function AddModal({ date, username, onClose, onSaved }: {
             </div>
             <div style={{ marginBottom: 20, display: 'flex', gap: 8 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖前指数均价 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
+                <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖前均价指数 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
                 <input style={inputStyle} type="number" placeholder="如 3100"
                   value={indexVal} onChange={e => setIndexVal(e.target.value)} />
               </div>
@@ -588,7 +588,7 @@ function EditModal({ record, username, onClose, onSaved }: {
         {record.type === 'sell' && (
           <div style={{ marginBottom: 20, display: 'flex', gap: 8 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖前指数均价 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>卖前均价指数 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填）</span></div>
               <input style={inputStyle} type="number" placeholder="如 3100"
                 value={indexVal} onChange={e => setIndexVal(e.target.value)} />
             </div>
@@ -601,7 +601,7 @@ function EditModal({ record, username, onClose, onSaved }: {
         )}
         {record.type === 'buy' && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填，用于计算指数均价）</span></div>
+            <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>买入时指数点位 <span style={{ color: '#bbb', fontWeight: 400 }}>（选填，用于计算均价）</span></div>
             <input style={inputStyle} type="number" placeholder="如 2389"
               value={indexVal} onChange={e => setIndexVal(e.target.value)} />
           </div>
@@ -873,7 +873,7 @@ function StatsScreen({ records, year, month, mode, setMode, statsYear, setStatsY
                     {f.sellIndexes.map((si, j) => (
                       <div key={j} style={{ fontSize: 11, color: 'var(--t2)', display: 'flex', gap: 6, alignItems: 'center' }}>
                         <span>{new Date(si.date + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}</span>
-                        {si.prevAvg != null && <span>指数均价 <span style={{ color: 'var(--tx)', fontWeight: 500 }}>{si.prevAvg.toFixed(2)}</span></span>}
+                        {si.prevAvg != null && <span>均价 <span style={{ color: 'var(--tx)', fontWeight: 500 }}>{si.prevAvg.toFixed(2)}</span></span>}
                         {si.prevAvg != null && si.sellIdx != null && <span>→</span>}
                         {si.sellIdx != null && <span>卖出 <span style={{ color: si.sellIdx > (si.prevAvg || si.sellIdx) ? '#E24B4A' : si.sellIdx < (si.prevAvg || si.sellIdx) ? '#1D9E75' : 'var(--tx)', fontWeight: 500 }}>{si.sellIdx.toFixed(2)}</span></span>}
                       </div>
@@ -1031,10 +1031,13 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
     const fundBuys = allBuys
       .filter(r => (r.fund_code || r.fund_name || '未知') === p.key)
       .sort((a, b) => a.record_date.localeCompare(b.record_date))
-    const lastFullSell = [...allSells.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)]
+    const fundSellsSorted = [...allSells.filter(r => (r.fund_code || r.fund_name || '未知') === p.key)]
       .sort((a, b) => a.record_date.localeCompare(b.record_date))
-      .reverse().find(s => !s.cost || s.cost === 0)
-    const fromDate = lastFullSell ? lastFullSell.record_date : '0000-00-00'
+    const lastFullSell = [...fundSellsSorted].reverse().find(s => !s.cost || s.cost === 0)
+    const lastPartialSellToDate = [...fundSellsSorted].reverse().find(s => s.cost && s.cost > 0 && s.sell_to_date)?.sell_to_date || null
+    const fromDate = lastFullSell
+      ? lastFullSell.record_date
+      : (lastPartialSellToDate || '0000-00-00')
     const buys = fundBuys.filter(b => b.record_date > fromDate)
     const byMonth: Record<string, number> = {}
     buys.forEach(b => {
@@ -1148,7 +1151,7 @@ function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, mont
         </div>
       </div>
 
-      {/* 指数均价行 */}
+      {/* 均价指数行 */}
       {buys && buys.length > 0 && buys.some((b: FundRecord) => b.index_val != null) && (() => {
         const validBuys = buys.filter((b: FundRecord) => b.index_val != null && b.amount > 0)
         const totalAmt = validBuys.reduce((s: number, b: FundRecord) => s + b.amount, 0)
@@ -1156,7 +1159,7 @@ function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, mont
         if (!avgIdx) return null
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', borderRadius: 8, padding: '7px 10px', marginTop: 8, fontSize: 12 }}>
-            <span style={{ color: 'var(--t2)' }}>指数均价</span>
+            <span style={{ color: 'var(--t2)' }}>均价指数</span>
             <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{avgIdx.toFixed(2)}</span>
             <span style={{ color: 'var(--t2)', fontSize: 11 }}>({validBuys.length}/{buys.length} 笔有指数)</span>
           </div>
