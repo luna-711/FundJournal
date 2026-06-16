@@ -1126,6 +1126,31 @@ function PositionScreen({ records }: { records: FundRecord[] }) {
   )
 }
 
+// ── Idx Expander ──────────────────────────────────────────
+function IdxExpander({ avgIdx, validCount, totalCount }: { avgIdx: number, validCount: number, totalCount: number }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ background: 'var(--bg)', borderRadius: 8, marginTop: 8, fontSize: 12, overflow: 'hidden' }}>
+      <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer' }}>
+        <span style={{ color: 'var(--t2)' }}>均价指数</span>
+        <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{avgIdx.toFixed(2)}</span>
+        <span style={{ color: 'var(--t2)', fontSize: 11 }}>({validCount}/{totalCount} 笔有指数)</span>
+        <span style={{ color: 'var(--t2)', marginLeft: 'auto', fontSize: 11 }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, padding: '0 8px 8px' }}>
+          {Array.from({ length: 12 }, (_, i) => i + 4).map(pct => (
+            <div key={pct} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card)', borderRadius: 6, padding: '5px 8px' }}>
+              <span style={{ color: 'var(--t2)' }}>+{pct}%</span>
+              <span style={{ fontWeight: 500, color: 'var(--tx)' }}>{Math.round(avgIdx * (1 + pct / 100))}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, months36, soldCost, buys, sells }: any) {
   const [expanded, setExpanded] = useState(false)
   const [activeMonth, setActiveMonth] = useState<string | null>(null)
@@ -1158,11 +1183,7 @@ function FundPositionCard({ p, pct, barColor, barColorDim, byMonth, maxVal, mont
         const avgIdx = totalAmt > 0 ? validBuys.reduce((s: number, b: FundRecord) => s + b.index_val! * b.amount, 0) / totalAmt : null
         if (!avgIdx) return null
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', borderRadius: 8, padding: '7px 10px', marginTop: 8, fontSize: 12 }}>
-            <span style={{ color: 'var(--t2)' }}>均价指数</span>
-            <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{avgIdx.toFixed(2)}</span>
-            <span style={{ color: 'var(--t2)', fontSize: 11 }}>({validBuys.length}/{buys.length} 笔有指数)</span>
-          </div>
+          <IdxExpander avgIdx={avgIdx} validCount={validBuys.length} totalCount={buys.length} />
         )
       })()}
       {/* 展开按钮 */}
