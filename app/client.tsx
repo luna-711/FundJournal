@@ -491,7 +491,8 @@ function EditModal({ record, username, onClose, onSaved }: {
       .select('*')
       .eq('username', username)
       .eq('fund_code', record.fund_code)
-      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
