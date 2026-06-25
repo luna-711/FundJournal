@@ -484,6 +484,7 @@ function EditModal({ record, username, onClose, onSaved }: {
   const [planAmount, setPlanAmount] = useState('')
   const [planFreq, setPlanFreq] = useState('workday')
   const [planSaving, setPlanSaving] = useState(false)
+  const [planNextDate, setPlanNextDate] = useState('')
 
   useEffect(() => {
     if (record.type !== 'buy' || !record.fund_code) return
@@ -499,6 +500,7 @@ function EditModal({ record, username, onClose, onSaved }: {
           setPlan(data)
           setPlanAmount(String(data.amount))
           setPlanFreq(data.frequency)
+          setPlanNextDate(data.last_synced_date || '')
         }
       })
   }, [record.fund_code, record.type, username])
@@ -506,11 +508,10 @@ function EditModal({ record, username, onClose, onSaved }: {
   const savePlan = async () => {
     if (!plan) return
     setPlanSaving(true)
-    await getDB().from('fund_plans').update({
-      amount: Number(planAmount),
-      frequency: planFreq,
-    }).eq('id', plan.id)
-    setPlan({ ...plan, amount: Number(planAmount), frequency: planFreq })
+    const updateData: any = { amount: Number(planAmount), frequency: planFreq }
+    if (planNextDate) updateData.last_synced_date = planNextDate
+    await getDB().from('fund_plans').update(updateData).eq('id', plan.id)
+    setPlan({ ...plan, ...updateData })
     setPlanSaving(false)
   }
 
@@ -622,7 +623,7 @@ function EditModal({ record, username, onClose, onSaved }: {
               <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>定投金额（元）</div>
               <input style={inputStyle} type="number" value={planAmount} onChange={e => setPlanAmount(e.target.value)} />
             </div>
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 6 }}>定投频率</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {[['workday','工作日'],['weekly','每周'],['biweekly','每两周'],['monthly','每月']].map(([val, label]) => (
@@ -635,13 +636,17 @@ function EditModal({ record, username, onClose, onSaved }: {
                 ))}
               </div>
             </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>下次从哪天开始</div>
+              <input type="date" style={{ ...inputStyle, fontSize: 14 }} value={planNextDate} onChange={e => setPlanNextDate(e.target.value)} />
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={savePlan} disabled={planSaving || !planAmount} style={{
-                flex: 1, padding: '10px 0', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                background: '#333', color: '#fff', border: 'none'
+              <button onClick={savePlan} disabled={planSaving} style={{
+                flex: 1, padding: '10px 0', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: planSaving ? 'default' : 'pointer', fontFamily: 'inherit',
+                background: planSaving ? 'var(--bd)' : '#333', color: '#fff', border: 'none'
               }}>保存计划</button>
               <button onClick={stopPlan} disabled={planSaving} style={{
-                padding: '10px 16px', borderRadius: 10, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
+                padding: '10px 16px', borderRadius: 10, fontSize: 14, cursor: planSaving ? 'default' : 'pointer', fontFamily: 'inherit',
                 background: 'transparent', color: '#E24B4A', border: '1px solid #FFCCCC'
               }}>停止定投</button>
             </div>
